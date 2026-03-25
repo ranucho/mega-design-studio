@@ -575,7 +575,7 @@ Output: A clean, full-body character on pure white background.`;
       }
 
       // Auto-update existing compositions after re-extraction (e.g. after reskin)
-      // Uses a setTimeout to read the latest project state after batch updates settle
+      // Uses a longer timeout to ensure all React state batches have flushed
       setTimeout(() => {
         setProject(currentProj => {
           if (!currentProj || currentProj.compositions.length === 0 || currentProj.extractedElements.length === 0) return currentProj;
@@ -584,11 +584,16 @@ Output: A clean, full-body character on pure white background.`;
           const updatedComps = currentProj.compositions.map(comp => {
             let layersChanged = false;
             const newLayers = comp.layers.map(layer => {
-              // Match by name (label)
-              const newEl = newEls.find(e => e.label === layer.name);
-              if (!newEl || newEl.dataUrl === layer.src) return layer;
+              // Match by name (label) — case-insensitive, trimmed
+              const layerName = layer.name.trim().toLowerCase();
+              const newEl = newEls.find(e => e.label.trim().toLowerCase() === layerName);
+              if (!newEl) return layer;
+              // Always update src even if dimensions match — the image content may have changed after reskin
+              if (newEl.dataUrl === layer.src) return layer;
               layersChanged = true;
-              const scaleAdj = (layer.nativeWidth * layer.scaleX) / newEl.nativeWidth;
+              const scaleAdj = layer.nativeWidth > 0 && newEl.nativeWidth > 0
+                ? (layer.nativeWidth * layer.scaleX) / newEl.nativeWidth
+                : layer.scaleX;
               return { ...layer, src: newEl.dataUrl, nativeWidth: newEl.nativeWidth, nativeHeight: newEl.nativeHeight, scaleX: scaleAdj, scaleY: scaleAdj };
             });
             if (!layersChanged) return comp;
@@ -598,7 +603,7 @@ Output: A clean, full-body character on pure white background.`;
           if (!anyUpdated) return currentProj;
           return { ...currentProj, compositions: updatedComps };
         });
-      }, 100);
+      }, 500);
     }
   }, [project?.sourceImage, detected, setProject, addExtractedElement, extractSingleElement, saveToAssets, toast]);
 
