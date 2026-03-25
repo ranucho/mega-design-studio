@@ -326,6 +326,70 @@ export const BANNER_PRESETS: BannerPreset[] = [
   { key: 'print-backdrop', name: 'Exhibition Backdrop', width: 7087, height: 3543, category: 'print' },
 ];
 
+// --- Skins ---
+
+export interface SkinSymbolSnapshot {
+  id: string;
+  name: string;
+  isolatedUrl: string;
+  rawCropDataUrl: string | null;
+  cropCoordinates: { x: number; y: number; w: number; h: number } | null;
+  spanRows?: number;
+  withFrame?: boolean;
+  symbolRole?: 'low' | 'high' | 'wild' | 'scatter';
+  scaleX?: number;
+  scaleY?: number;
+}
+
+export interface SlotSkin {
+  id: string;
+  name: string;
+  createdAt: string;
+  thumbnailUrl: string;
+  masterPrompt: string;
+  masterImage: string;
+  reskinResult: string;
+  reelsFrame: string | null;
+  symbols: SkinSymbolSnapshot[];
+  gridState: string[][];
+  gridRows: number;
+  gridCols: number;
+  layoutOffsetX: number;
+  layoutOffsetY: number;
+  layoutWidth: number;
+  layoutHeight: number;
+  layoutGutterHorizontal: number;
+  layoutGutterVertical: number;
+  symbolScale: number;
+  firebaseUrls?: Record<string, string>;
+  isUploaded: boolean;
+  isUploading: boolean;
+}
+
+export interface BannerSkin {
+  id: string;
+  name: string;
+  createdAt: string;
+  thumbnailUrl: string;
+  reskinTheme: string;
+  sourceImage: string;
+  sourceWidth: number;
+  sourceHeight: number;
+  detectedElements: DetectedElement[];
+  extractedElements: ExtractedElement[];
+  compositions: BannerComposition[];
+  firebaseUrls?: Record<string, string>;
+  isUploaded: boolean;
+  isUploading: boolean;
+}
+
+export interface SkinIndexEntry {
+  id: string;
+  name: string;
+  thumbnailUrl: string;
+  createdAt: string;
+}
+
 export const BANNER_PRESET_CATEGORIES: { key: BannerPresetCategory; label: string }[] = [
   { key: 'app-stores', label: 'App Stores' },
   { key: 'facebook', label: 'Facebook / Meta' },

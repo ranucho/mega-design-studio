@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { useExtractor } from '@/contexts/ExtractorContext';
 import { useApp } from '@/contexts/AppContext';
+import { SkinSelector } from '@/components/shared/SkinSelector';
 import {
   isolateSymbol,
   isolateSymbolWithFrame,
@@ -1728,6 +1729,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
           {tabBtn('extract', '2. Extract', !currentMasterImage)}
           {tabBtn('layout', '3. Layout & Animate', symbols.every(s => !s.isolatedUrl))}
         </div>
+        <SkinSelector type="slots" />
       </div>
 
       <div className="flex-1 overflow-y-auto p-8">

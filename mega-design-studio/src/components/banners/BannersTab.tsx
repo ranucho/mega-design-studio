@@ -12,6 +12,7 @@ import { BannerReskinPanel } from './BannerReskinPanel';
 import { BannerSparklePanel } from './BannerSparklePanel';
 import { BannerLuckyReskin } from './BannerLuckyReskin';
 import { BannerStage } from '@/types';
+import { SkinSelector } from '@/components/shared/SkinSelector';
 
 // Error boundary to catch render crashes and show the error instead of black screen
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
@@ -126,6 +127,9 @@ export const BannersTab: React.FC = () => {
             <span>Generating banners...</span>
           </div>
         )}
+        <div className="ml-auto">
+          <SkinSelector type="banner" />
+        </div>
       </div>
 
       {/* Stage Content */}

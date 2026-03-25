@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState } from 'react';
-import { VideoSegment, GeneratedClip, ReferenceAsset, SlotState, CharacterState, Crop, BackgroundState, SymbolGeneratorState, CompositorState, TimeFormat } from '@/types';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { VideoSegment, GeneratedClip, ReferenceAsset, SlotState, CharacterState, Crop, BackgroundState, SymbolGeneratorState, CompositorState, TimeFormat, SlotSkin, SkinIndexEntry } from '@/types';
+import { getSlotSkinIndex, getAllSlotSkins } from '@/services/skinDb';
 
 interface ExtractorContextType {
   // Video source
@@ -53,6 +54,14 @@ interface ExtractorContextType {
   // Loading
   loadingAction: string | null;
   setLoadingAction: (action: string | null) => void;
+
+  // Slot Skins
+  slotSkins: SlotSkin[];
+  setSlotSkins: React.Dispatch<React.SetStateAction<SlotSkin[]>>;
+  activeSlotSkinId: string | null;
+  setActiveSlotSkinId: (id: string | null) => void;
+  slotSkinIndex: SkinIndexEntry[];
+  setSlotSkinIndex: React.Dispatch<React.SetStateAction<SkinIndexEntry[]>>;
 }
 
 const ExtractorContext = createContext<ExtractorContextType | null>(null);
@@ -164,6 +173,18 @@ export const ExtractorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [captureTimeUnit, setCaptureTimeUnit] = useState<TimeFormat>('seconds');
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
 
+  // Slot Skins
+  const [slotSkins, setSlotSkins] = useState<SlotSkin[]>([]);
+  const [activeSlotSkinId, setActiveSlotSkinId] = useState<string | null>(null);
+  const [slotSkinIndex, setSlotSkinIndex] = useState<SkinIndexEntry[]>(() => getSlotSkinIndex());
+
+  // Load full skins from IndexedDB on mount
+  useEffect(() => {
+    getAllSlotSkins().then(skins => {
+      if (skins.length > 0) setSlotSkins(skins);
+    }).catch(console.error);
+  }, []);
+
   return (
     <ExtractorContext.Provider value={{
       videoUrl, setVideoUrl,
@@ -181,6 +202,9 @@ export const ExtractorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       compositorState, setCompositorState,
       captureTimeUnit, setCaptureTimeUnit,
       loadingAction, setLoadingAction,
+      slotSkins, setSlotSkins,
+      activeSlotSkinId, setActiveSlotSkinId,
+      slotSkinIndex, setSlotSkinIndex,
     }}>
       {children}
     </ExtractorContext.Provider>

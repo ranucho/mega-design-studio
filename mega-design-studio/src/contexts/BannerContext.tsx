@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import {
   BannerProject,
   BannerComposition,
@@ -7,10 +7,13 @@ import {
   DetectedElement,
   BannerStage,
   BannerMode,
+  BannerSkin,
+  SkinIndexEntry,
   BANNER_PRESETS,
 } from '@/types';
 import { generateBannerLayout } from '@/services/gemini';
 import { getLayerZOrder } from '@/services/gemini/banner-rules';
+import { getBannerSkinIndex, getAllBannerSkins } from '@/services/skinDb';
 
 interface BannerContextType {
   project: BannerProject | null;
@@ -38,6 +41,14 @@ interface BannerContextType {
 
   // Generation
   generateCompositions: () => Promise<void>;
+
+  // Banner Skins
+  bannerSkins: BannerSkin[];
+  setBannerSkins: React.Dispatch<React.SetStateAction<BannerSkin[]>>;
+  activeBannerSkinId: string | null;
+  setActiveBannerSkinId: (id: string | null) => void;
+  bannerSkinIndex: SkinIndexEntry[];
+  setBannerSkinIndex: React.Dispatch<React.SetStateAction<SkinIndexEntry[]>>;
 }
 
 const BannerContext = createContext<BannerContextType | null>(null);
@@ -51,6 +62,17 @@ export const useBanner = () => {
 export const BannerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [project, setProject] = useState<BannerProject | null>(null);
   const [activeCompositionId, setActiveCompositionId] = useState<string | null>(null);
+
+  // Banner Skins
+  const [bannerSkins, setBannerSkins] = useState<BannerSkin[]>([]);
+  const [activeBannerSkinId, setActiveBannerSkinId] = useState<string | null>(null);
+  const [bannerSkinIndex, setBannerSkinIndex] = useState<SkinIndexEntry[]>(() => getBannerSkinIndex());
+
+  useEffect(() => {
+    getAllBannerSkins().then(skins => {
+      if (skins.length > 0) setBannerSkins(skins);
+    }).catch(console.error);
+  }, []);
 
   const initProject = useCallback((sourceImage: string, width: number, height: number, mode: BannerMode) => {
     setProject({
@@ -262,6 +284,9 @@ export const BannerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       activeCompositionId,
       setActiveCompositionId,
       generateCompositions,
+      bannerSkins, setBannerSkins,
+      activeBannerSkinId, setActiveBannerSkinId,
+      bannerSkinIndex, setBannerSkinIndex,
     }}>
       {children}
     </BannerContext.Provider>

@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react'
 import { useExtractor } from '@/contexts/ExtractorContext';
 import { useApp } from '@/contexts/AppContext';
 import { CompositorLayer, ReferenceAsset } from '@/types';
+import { SkinSelector } from '@/components/shared/SkinSelector';
 import { CompositorTimeline } from './CompositorTimeline';
 import { formatTimeShort } from '@/utils/timelineUtils';
 
@@ -759,6 +760,7 @@ export const Compositor: React.FC = () => {
           <span className="text-[10px] text-zinc-600 font-mono">{formatTimeShort(playheadTime)} / {formatTimeShort(computedDuration)}</span>
         </div>
         <div className="flex items-center gap-2">
+          <SkinSelector type="slots" />
           {/* Resolution preset */}
           <div className="flex gap-1">
             {RESOLUTION_PRESETS.map(p => {
