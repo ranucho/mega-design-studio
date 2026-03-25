@@ -59,4 +59,7 @@ export {
   resizeImageExact,
   generateBannerLayout,
   reskinBanner,
+  sparkleBanner,
+  DEFAULT_FINE_TUNE,
+  type FineTuneOptions,
 } from './banner';

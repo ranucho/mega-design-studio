@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useBanner } from '@/contexts/BannerContext';
 import { BannerComposition, BannerLayer } from '@/types';
 
@@ -19,10 +19,11 @@ interface BannerLayerPanelProps {
 export const BannerLayerPanel: React.FC<BannerLayerPanelProps> = ({ composition }) => {
   const { updateComposition, updateLayer } = useBanner();
   const { layers, selectedLayerId } = composition;
+  const [expandedOpacity, setExpandedOpacity] = useState<string | null>(null);
 
   const selectLayer = useCallback((id: string) => {
-    updateComposition(composition.id, { selectedLayerId: id });
-  }, [composition.id, updateComposition]);
+    updateComposition(composition.id, { selectedLayerId: selectedLayerId === id ? null : id });
+  }, [composition.id, selectedLayerId, updateComposition]);
 
   const moveLayer = useCallback((id: string, direction: 'up' | 'down') => {
     const idx = layers.findIndex(l => l.id === id);
@@ -41,101 +42,143 @@ export const BannerLayerPanel: React.FC<BannerLayerPanelProps> = ({ composition 
     });
   }, [layers, composition.id, selectedLayerId, updateComposition]);
 
+  const duplicateLayer = useCallback((id: string) => {
+    const layer = layers.find(l => l.id === id);
+    if (!layer) return;
+    const newLayer = {
+      ...layer,
+      id: `${layer.id}_dup_${Date.now()}`,
+      name: `${layer.name} (copy)`,
+      x: layer.x + 10,
+      y: layer.y + 10,
+    };
+    const idx = layers.findIndex(l => l.id === id);
+    const newLayers = [...layers];
+    newLayers.splice(idx + 1, 0, newLayer);
+    updateComposition(composition.id, { layers: newLayers, selectedLayerId: newLayer.id });
+  }, [layers, composition.id, updateComposition]);
+
   // Reversed: top of list = top layer (last in array)
   const displayLayers = [...layers].reverse();
 
   return (
-    <div className="flex flex-col h-full bg-zinc-900/60 border-r border-zinc-800">
-      <div className="px-3 py-2 border-b border-zinc-800">
+    <div className="flex flex-col h-full bg-zinc-900/60">
+      <div className="px-3 py-2 border-b border-zinc-800 flex items-center justify-between">
         <h3 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Layers</h3>
+        <span className="text-[9px] text-zinc-600">{layers.length} — top to bottom</span>
       </div>
       <div className="flex-1 overflow-auto">
         {displayLayers.map((layer) => {
           const isSelected = layer.id === selectedLayerId;
+          const showOpacity = expandedOpacity === layer.id;
           return (
-            <div
-              key={layer.id}
-              onClick={() => selectLayer(layer.id)}
-              className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer border-b border-zinc-800/50 transition-colors ${
-                isSelected ? 'bg-cyan-600/15' : 'hover:bg-zinc-800/50'
-              }`}
-            >
-              {/* Thumbnail */}
+            <div key={layer.id}>
               <div
-                className="w-8 h-8 rounded shrink-0 flex items-center justify-center border"
-                style={{ borderColor: ROLE_COLORS[layer.role] + '60' }}
+                onClick={() => selectLayer(layer.id)}
+                className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer border-b border-zinc-800/50 transition-colors ${
+                  isSelected ? 'bg-cyan-600/15' : 'hover:bg-zinc-800/50'
+                }`}
               >
-                {layer.type === 'image' && layer.src ? (
-                  <img src={layer.src} alt="" className="w-full h-full object-cover rounded" />
-                ) : layer.type === 'text' ? (
-                  <span className="text-[8px] text-zinc-400 font-bold">Aa</span>
-                ) : (
-                  <i className="fa-solid fa-shapes text-[8px] text-zinc-500" />
-                )}
-              </div>
-
-              {/* Name + role */}
-              <div className="flex-1 min-w-0">
-                <div className={`text-[11px] truncate ${isSelected ? 'text-cyan-300' : 'text-zinc-300'}`}>
-                  {layer.name}
-                </div>
+                {/* Thumbnail */}
                 <div
-                  className="text-[8px] font-bold uppercase"
-                  style={{ color: ROLE_COLORS[layer.role] }}
+                  className="w-8 h-8 rounded shrink-0 flex items-center justify-center border overflow-hidden"
+                  style={{ borderColor: ROLE_COLORS[layer.role] + '60' }}
                 >
-                  {layer.role}
+                  {layer.type === 'image' && layer.src ? (
+                    <img src={layer.src} alt="" className="w-full h-full object-cover rounded" />
+                  ) : layer.type === 'text' ? (
+                    <span className="text-[8px] text-zinc-400 font-bold">Aa</span>
+                  ) : (
+                    <i className="fa-solid fa-shapes text-[8px] text-zinc-500" />
+                  )}
+                </div>
+
+                {/* Name + role */}
+                <div className="flex-1 min-w-0">
+                  <div className={`text-[11px] truncate ${isSelected ? 'text-cyan-300' : layer.visible ? 'text-zinc-300' : 'text-zinc-600 line-through'}`}>
+                    {layer.name}
+                  </div>
+                  <span
+                    className="text-[8px] font-bold uppercase"
+                    style={{ color: ROLE_COLORS[layer.role] }}
+                  >
+                    {layer.role}
+                  </span>
+                </div>
+
+                {/* Always-visible controls */}
+                <div className="flex items-center gap-0.5 shrink-0">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); moveLayer(layer.id, 'up'); }}
+                    title="Move Up (front)"
+                    className="w-5 h-5 flex items-center justify-center text-zinc-600 hover:text-white transition-colors"
+                  >
+                    <i className="fa-solid fa-chevron-up text-[8px]" />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); moveLayer(layer.id, 'down'); }}
+                    title="Move Down (back)"
+                    className="w-5 h-5 flex items-center justify-center text-zinc-600 hover:text-white transition-colors"
+                  >
+                    <i className="fa-solid fa-chevron-down text-[8px]" />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setExpandedOpacity(showOpacity ? null : layer.id); }}
+                    className={`w-5 h-5 flex items-center justify-center transition-colors ${showOpacity ? 'text-cyan-400' : 'text-zinc-600 hover:text-zinc-400'}`}
+                    title={`Opacity ${Math.round(layer.opacity * 100)}%`}
+                  >
+                    <i className="fa-solid fa-circle-half-stroke text-[8px]" />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); updateLayer(composition.id, layer.id, { visible: !layer.visible }); }}
+                    className={`w-5 h-5 flex items-center justify-center transition-colors ${layer.visible ? 'text-zinc-400 hover:text-white' : 'text-zinc-700'}`}
+                    title={layer.visible ? 'Hide' : 'Show'}
+                  >
+                    <i className={`fa-solid ${layer.visible ? 'fa-eye' : 'fa-eye-slash'} text-[8px]`} />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); updateLayer(composition.id, layer.id, { locked: !layer.locked }); }}
+                    className={`w-5 h-5 flex items-center justify-center transition-colors ${layer.locked ? 'text-yellow-500' : 'text-zinc-600 hover:text-zinc-400'}`}
+                    title={layer.locked ? 'Unlock' : 'Lock'}
+                  >
+                    <i className={`fa-solid ${layer.locked ? 'fa-lock' : 'fa-lock-open'} text-[8px]`} />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); duplicateLayer(layer.id); }}
+                    title="Duplicate Layer"
+                    className="w-5 h-5 flex items-center justify-center text-zinc-700 hover:text-zinc-400 transition-colors"
+                  >
+                    <i className="fa-solid fa-clone text-[8px]" />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); deleteLayer(layer.id); }}
+                    title="Delete Layer"
+                    className="w-5 h-5 flex items-center justify-center text-zinc-700 hover:text-red-400 transition-colors"
+                  >
+                    <i className="fa-solid fa-trash text-[8px]" />
+                  </button>
                 </div>
               </div>
 
-              {/* Controls */}
-              <div className="flex items-center gap-0.5 shrink-0">
-                <button
-                  onClick={(e) => { e.stopPropagation(); updateLayer(composition.id, layer.id, { visible: !layer.visible }); }}
-                  className={`p-1 rounded transition-colors ${layer.visible ? 'text-zinc-400 hover:text-white' : 'text-zinc-700'}`}
-                  title={layer.visible ? 'Hide' : 'Show'}
-                >
-                  <i className={`fa-solid ${layer.visible ? 'fa-eye' : 'fa-eye-slash'} text-[9px]`} />
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); updateLayer(composition.id, layer.id, { locked: !layer.locked }); }}
-                  className={`p-1 rounded transition-colors ${layer.locked ? 'text-yellow-500' : 'text-zinc-600 hover:text-zinc-400'}`}
-                  title={layer.locked ? 'Unlock' : 'Lock'}
-                >
-                  <i className={`fa-solid ${layer.locked ? 'fa-lock' : 'fa-lock-open'} text-[9px]`} />
-                </button>
-              </div>
+              {/* Inline opacity slider */}
+              {showOpacity && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800/60 border-b border-zinc-800/50">
+                  <span className="text-[9px] text-zinc-500 w-5 shrink-0">Op</span>
+                  <input
+                    type="range"
+                    min={0} max={1} step={0.01}
+                    value={layer.opacity}
+                    onChange={e => updateLayer(composition.id, layer.id, { opacity: Number(e.target.value) })}
+                    className="flex-1 accent-cyan-500 h-1"
+                  />
+                  <span className="text-[9px] text-zinc-400 w-7 text-right">{Math.round(layer.opacity * 100)}%</span>
+                </div>
+              )}
             </div>
           );
         })}
       </div>
 
-      {/* Layer actions */}
-      {selectedLayerId && (
-        <div className="shrink-0 flex items-center gap-1 px-2 py-2 border-t border-zinc-800">
-          <button
-            onClick={() => moveLayer(selectedLayerId, 'up')}
-            title="Move Up"
-            className="p-1.5 text-zinc-500 hover:text-white rounded transition-colors"
-          >
-            <i className="fa-solid fa-arrow-up text-[10px]" />
-          </button>
-          <button
-            onClick={() => moveLayer(selectedLayerId, 'down')}
-            title="Move Down"
-            className="p-1.5 text-zinc-500 hover:text-white rounded transition-colors"
-          >
-            <i className="fa-solid fa-arrow-down text-[10px]" />
-          </button>
-          <div className="flex-1" />
-          <button
-            onClick={() => deleteLayer(selectedLayerId)}
-            title="Delete Layer"
-            className="p-1.5 text-red-500/60 hover:text-red-400 rounded transition-colors"
-          >
-            <i className="fa-solid fa-trash text-[10px]" />
-          </button>
-        </div>
-      )}
     </div>
   );
 };

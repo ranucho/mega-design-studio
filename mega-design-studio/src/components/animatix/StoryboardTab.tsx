@@ -3,6 +3,7 @@ import { StoryScene, Character } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { ImagePreview } from '@/components/ui/ImagePreview';
 import { AddSceneDialog } from './AddSceneDialog';
+import { AspectRatioSelector } from '@/components/shared/AspectRatioSelector';
 import { ExtendStoryDialog } from './ExtendStoryDialog';
 import { useAnimatix } from '@/contexts/AnimatixContext';
 import { useApp } from '@/contexts/AppContext';
@@ -426,15 +427,12 @@ export const StoryboardTab: React.FC = () => {
           <p className="text-xs text-zinc-500 mt-1 max-w-md line-clamp-1">{brief}</p>
         </div>
         <div className="flex gap-3 items-center">
-          <select
+          <AspectRatioSelector
             value={aspectRatio}
-            onChange={(e) => handleSetAspectRatio(e.target.value)}
-            className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-xs text-white"
-          >
-            <option value="16:9">16:9 Landscape</option>
-            <option value="9:16">9:16 Portrait</option>
-            <option value="1:1">1:1 Square</option>
-          </select>
+            onChange={handleSetAspectRatio}
+            options={['16:9', '9:16', '1:1']}
+            compact
+          />
           {!isApproved ? (
             <Button
               onClick={handleApprove}

@@ -19,6 +19,7 @@ import {
 import { SymbolItem, MergedFrame, ReferenceAsset } from '@/types';
 import { VideoFullscreen } from '@/components/shared/VideoFullscreen';
 import { parallelBatch } from '@/services/parallelBatch';
+import { AspectRatioSelector } from '@/components/shared/AspectRatioSelector';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1640,13 +1641,13 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-3xl w-full max-h-[80vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center p-6 border-b border-zinc-800">
               <h3 className="text-lg font-black uppercase tracking-widest text-white flex items-center gap-2">
-                <i className="fas fa-flask text-indigo-500" /> Select from Lab
+                <i className="fas fa-folder-open text-indigo-500" /> Load from Assets
               </h3>
               <button onClick={() => setShowAssetPicker(false)} className="text-zinc-500 hover:text-white"><i className="fas fa-times" /></button>
             </div>
             <div className="flex-1 overflow-y-auto p-6">
               {labAssets.length === 0 ? (
-                <div className="text-center py-12 text-zinc-500">No assets available. Generate some in the Lab first.</div>
+                <div className="text-center py-12 text-zinc-500">No assets available yet.</div>
               ) : (
                 <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
                   {labAssets.map(asset => (
@@ -1755,7 +1756,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                   disabled={labAssets.length === 0}
                   className="w-full mt-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-3 rounded-xl text-xs font-bold uppercase border border-zinc-700 transition-all disabled:opacity-30 flex items-center justify-center gap-2"
                 >
-                  <i className="fas fa-flask" /> Load from Lab
+                  <i className="fas fa-flask" /> Load from Assets
                   {labAssets.length > 0 && (
                     <span className="bg-indigo-600 text-white px-2 py-0.5 rounded-full text-[9px]">{labAssets.length}</span>
                   )}
@@ -2537,28 +2538,11 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                     <label className="text-[10px] uppercase font-bold text-zinc-500 block mb-2">
                       Video Aspect Ratio
                     </label>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setVideoAspectRatio('16:9')}
-                        className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase flex items-center justify-center gap-1.5 border transition-colors ${
-                          videoAspectRatio === '16:9'
-                            ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg'
-                            : 'border-zinc-700 text-zinc-500 hover:text-white hover:border-zinc-500'
-                        }`}
-                      >
-                        <i className="fas fa-tv" /> 16:9
-                      </button>
-                      <button
-                        onClick={() => setVideoAspectRatio('9:16')}
-                        className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase flex items-center justify-center gap-1.5 border transition-colors ${
-                          videoAspectRatio === '9:16'
-                            ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg'
-                            : 'border-zinc-700 text-zinc-500 hover:text-white hover:border-zinc-500'
-                        }`}
-                      >
-                        <i className="fas fa-mobile-alt" /> 9:16
-                      </button>
-                    </div>
+                    <AspectRatioSelector
+                      value={videoAspectRatio}
+                      onChange={(r) => setVideoAspectRatio(r as '16:9' | '9:16')}
+                      options={['16:9', '9:16']}
+                    />
                     <p className="text-[9px] text-zinc-600 mt-1 italic">
                       Green screen padding fills any missing space to match the selected ratio.
                     </p>

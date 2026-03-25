@@ -165,6 +165,30 @@ export const BannerExportDialog: React.FC = () => {
   const errorCount = totalWarnings.filter(w => w.severity === 'error').length;
   const warningCount = totalWarnings.filter(w => w.severity === 'warning').length;
 
+  /** Convert a data URL to a Blob */
+  const dataUrlToBlob = useCallback(async (dataUrl: string, targetFormat: ExportFormat, targetQuality: number): Promise<Blob> => {
+    // Load into canvas to convert format
+    const img = new Image();
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error('Failed to load sparkled image'));
+      img.src = dataUrl;
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(img, 0, 0);
+    const mimeType = targetFormat === 'jpeg' ? 'image/jpeg' : targetFormat === 'webp' ? 'image/webp' : 'image/png';
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(
+        blob => blob ? resolve(blob) : reject(new Error('Failed to create blob')),
+        mimeType,
+        targetFormat === 'png' ? undefined : targetQuality / 100,
+      );
+    });
+  }, []);
+
   const handleExportAll = useCallback(async () => {
     if (compositions.length === 0) return;
     setIsExporting(true);
@@ -176,7 +200,10 @@ export const BannerExportDialog: React.FC = () => {
 
       for (let i = 0; i < compositions.length; i++) {
         const comp = compositions[i];
-        const blob = await renderCompositionToBlob(comp, format, quality);
+        // Use sparkle version if available
+        const blob = comp.sparkleDataUrl
+          ? await dataUrlToBlob(comp.sparkleDataUrl, format, quality)
+          : await renderCompositionToBlob(comp, format, quality);
         const ext = format === 'jpeg' ? 'jpg' : format;
         const filename = `${comp.presetKey}_${comp.width}x${comp.height}.${ext}`;
         folder.file(filename, blob);
@@ -200,7 +227,9 @@ export const BannerExportDialog: React.FC = () => {
   // Export single composition
   const handleExportSingle = useCallback(async (comp: BannerComposition) => {
     try {
-      const blob = await renderCompositionToBlob(comp, format, quality);
+      const blob = comp.sparkleDataUrl
+        ? await dataUrlToBlob(comp.sparkleDataUrl, format, quality)
+        : await renderCompositionToBlob(comp, format, quality);
       const ext = format === 'jpeg' ? 'jpg' : format;
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -386,11 +415,11 @@ export const BannerExportDialog: React.FC = () => {
       {/* Bottom bar */}
       <div className="shrink-0 flex items-center justify-between px-6 py-3 bg-zinc-900/80 border-t border-zinc-800">
         <button
-          onClick={() => setStage('edit')}
+          onClick={() => setStage('sparkle')}
           className="px-4 py-2 text-sm text-zinc-400 hover:text-white border border-zinc-700 rounded-lg transition-colors"
         >
           <i className="fa-solid fa-arrow-left mr-2" />
-          Back to Editor
+          Back to Fine Tune
         </button>
         <button
           disabled={isExporting || compositions.length === 0}

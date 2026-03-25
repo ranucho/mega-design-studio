@@ -162,7 +162,7 @@ export interface CompositorState {
 // --- Banners ---
 
 export type BannerMode = 'resize' | 'reskin';
-export type BannerStage = 'upload' | 'reskin' | 'extract' | 'presets' | 'edit' | 'export';
+export type BannerStage = 'upload' | 'reskin' | 'extract' | 'presets' | 'edit' | 'sparkle' | 'export';
 
 export interface BannerLayer {
   id: string;
@@ -211,6 +211,8 @@ export interface BannerComposition {
   backgroundColor: string;
   warnings: QualityWarning[];
   status: 'pending' | 'generating' | 'ready' | 'edited' | 'approved';
+  /** Data URL of sparkle-enhanced version (if applied) */
+  sparkleDataUrl?: string;
 }
 
 export interface ExtractedElement {
@@ -232,9 +234,29 @@ export interface DetectedElement {
   detectedText?: string;
 }
 
+/** High-level category for grouping detected elements */
+export type ElementCategory = 'text' | 'ui' | 'images';
+
+export const ROLE_TO_CATEGORY: Record<BannerLayer['role'], ElementCategory> = {
+  text: 'text',
+  cta: 'ui',
+  logo: 'ui',
+  decoration: 'ui',
+  background: 'images',
+  character: 'images',
+  other: 'images',
+};
+
+export const CATEGORY_META: Record<ElementCategory, { label: string; icon: string; color: string }> = {
+  text: { label: 'Text', icon: 'fa-font', color: '#22c55e' },
+  ui: { label: 'UI Elements', icon: 'fa-layer-group', color: '#f97316' },
+  images: { label: 'Images', icon: 'fa-image', color: '#3b82f6' },
+};
+
 export interface BannerProject {
   id: string;
-  sourceImage: string;       // data URL of uploaded banner
+  sourceImage: string;       // data URL of uploaded banner (or reskinned)
+  originalImage?: string;    // original before reskin (for before/after comparison)
   sourceWidth: number;
   sourceHeight: number;
   detectedElements: DetectedElement[];  // persisted detection results

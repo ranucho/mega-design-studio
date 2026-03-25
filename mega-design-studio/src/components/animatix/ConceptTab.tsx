@@ -3,6 +3,7 @@ import { Character } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { ImagePreview } from '@/components/ui/ImagePreview';
 import { useAnimatix } from '@/contexts/AnimatixContext';
+import { AspectRatioSelector } from '@/components/shared/AspectRatioSelector';
 import { useApp } from '@/contexts/AppContext';
 import { generateRandomStoryConcept, generateStoryStructure, generateCharacterSheetFromStory } from '@/services/gemini';
 import { parallelBatch } from '@/services/parallelBatch';
@@ -339,11 +340,11 @@ export const ConceptTab: React.FC = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-zinc-400 mb-2">Aspect Ratio</label>
-              <select value={aspectRatio} onChange={(e) => handleSetAspectRatio(e.target.value)}
-                className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white focus:border-indigo-500 outline-none appearance-none">
-                <option value="16:9">Landscape (16:9)</option>
-                <option value="9:16">Portrait (9:16)</option>
-              </select>
+              <AspectRatioSelector
+                value={aspectRatio}
+                onChange={handleSetAspectRatio}
+                options={['16:9', '9:16']}
+              />
             </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-zinc-400 mb-2">Brief Storyline</label>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAnimatix } from '@/contexts/AnimatixContext';
 import { Button } from '@/components/ui/Button';
+import { AspectRatioSelector } from '@/components/shared/AspectRatioSelector';
 
 interface ExtendStoryDialogProps {
   isOpen: boolean;
@@ -114,18 +115,11 @@ export const ExtendStoryDialog: React.FC<ExtendStoryDialogProps> = ({
               <label className="block text-sm font-medium text-zinc-400 mb-2">
                 Aspect Ratio
               </label>
-              <select
+              <AspectRatioSelector
                 value={aspectRatio}
-                onChange={(e) => setAspectRatio(e.target.value)}
-                className="w-full h-10 bg-zinc-950 border border-zinc-700 rounded-lg px-3 text-white focus:border-indigo-500 outline-none cursor-pointer"
-              >
-                <option value="16:9">Landscape (16:9)</option>
-                <option value="9:16">Portrait (9:16)</option>
-                <option value="1:1">Square (1:1)</option>
-              </select>
-              <p className="text-[10px] text-zinc-500 mt-1">
-                Updates setting for future generations.
-              </p>
+                onChange={setAspectRatio}
+                options={['16:9', '9:16', '1:1']}
+              />
             </div>
           </div>
 

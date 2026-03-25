@@ -1,10 +1,12 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { useBanner } from '@/contexts/BannerContext';
 import { BannerComposition } from '@/types';
 
 interface BannerCompositionGridProps {
   onSelect: (id: string) => void;
   selectedId: string | null;
+  /** Gallery mode: shows all banners in a zoomable grid. Click opens compositor. */
+  galleryMode?: boolean;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -15,8 +17,16 @@ const STATUS_COLORS: Record<string, string> = {
   approved: 'bg-emerald-500',
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  pending: 'Pending',
+  generating: 'Generating...',
+  ready: 'Ready',
+  edited: 'Edited',
+  approved: 'Approved',
+};
+
 // Mini canvas thumbnail renderer
-const CompThumbnail: React.FC<{ composition: BannerComposition; width: number; height: number }> = ({ composition, width, height }) => {
+const CompThumbnail: React.FC<{ composition: BannerComposition; width: number; height: number; contain?: boolean }> = ({ composition, width, height, contain }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
 
@@ -29,13 +39,28 @@ const CompThumbnail: React.FC<{ composition: BannerComposition; width: number; h
     const scale = Math.min(width / composition.width, height / composition.height);
 
     ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = composition.backgroundColor || '#000';
-    ctx.fillRect(0, 0, width, height);
 
-    ctx.save();
-    ctx.scale(scale, scale);
+    if (contain) {
+      // In contain mode, center the composition within the canvas and show the full image
+      ctx.fillStyle = '#18181b'; // Dark bg for empty space
+      ctx.fillRect(0, 0, width, height);
+      const renderW = composition.width * scale;
+      const renderH = composition.height * scale;
+      const offsetX = (width - renderW) / 2;
+      const offsetY = (height - renderH) / 2;
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+      ctx.scale(scale, scale);
+      // Fill composition background within the offset area
+      ctx.fillStyle = composition.backgroundColor || '#000';
+      ctx.fillRect(0, 0, composition.width, composition.height);
+    } else {
+      ctx.fillStyle = composition.backgroundColor || '#000';
+      ctx.fillRect(0, 0, width, height);
+      ctx.save();
+      ctx.scale(scale, scale);
+    }
 
-    // Load and draw image layers
     let pending = 0;
     const draw = () => {
       ctx.clearRect(0, 0, composition.width, composition.height);
@@ -83,7 +108,9 @@ const CompThumbnail: React.FC<{ composition: BannerComposition; width: number; h
   return <canvas ref={canvasRef} width={width} height={height} className="rounded" />;
 };
 
-export const BannerCompositionGrid: React.FC<BannerCompositionGridProps> = ({ onSelect, selectedId }) => {
+// ── Strip mode (bottom bar, horizontal scroll) ──
+
+const StripView: React.FC<BannerCompositionGridProps> = ({ onSelect, selectedId }) => {
   const { project } = useBanner();
   if (!project) return null;
 
@@ -96,13 +123,11 @@ export const BannerCompositionGrid: React.FC<BannerCompositionGridProps> = ({ on
     );
   }
 
-  // Count ready / total
   const readyCount = compositions.filter(c => c.status === 'ready' || c.status === 'edited' || c.status === 'approved').length;
   const generatingCount = compositions.filter(c => c.status === 'generating').length;
 
   return (
     <div className="flex flex-col">
-      {/* Status bar */}
       {generatingCount > 0 && (
         <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-yellow-400 bg-yellow-500/5 border-b border-zinc-800">
           <i className="fa-solid fa-spinner fa-spin text-[10px]" />
@@ -152,4 +177,137 @@ export const BannerCompositionGrid: React.FC<BannerCompositionGridProps> = ({ on
       </div>
     </div>
   );
+};
+
+// ── Gallery mode (full screen, zoomable, like Adobe Bridge) ──
+
+const GalleryView: React.FC<BannerCompositionGridProps> = ({ onSelect }) => {
+  const { project } = useBanner();
+  const [zoom, setZoom] = useState(50); // 10-100 slider value → controls thumb size
+
+  if (!project) return null;
+  const compositions = project.compositions;
+
+  // Zoom maps to a base thumbnail height: 10→60px, 50→180px, 100→400px
+  const thumbBaseH = Math.round(60 + (zoom / 100) * 340);
+
+  // Sort: generating first, then by dimensions
+  const sorted = useMemo(() =>
+    [...compositions].sort((a, b) => {
+      if (a.status === 'generating' && b.status !== 'generating') return -1;
+      if (b.status === 'generating' && a.status !== 'generating') return 1;
+      return (b.width * b.height) - (a.width * a.height);
+    }),
+    [compositions],
+  );
+
+  const readyCount = compositions.filter(c => c.status !== 'pending' && c.status !== 'generating').length;
+  const generatingCount = compositions.filter(c => c.status === 'generating').length;
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Toolbar */}
+      <div className="shrink-0 flex items-center gap-4 px-4 py-2 bg-zinc-900/60 border-b border-zinc-800">
+        <div className="flex items-center gap-2 text-xs text-zinc-400">
+          <i className="fa-solid fa-grid-2 text-zinc-500" />
+          <span className="font-medium text-zinc-300">{compositions.length} Banners</span>
+          {generatingCount > 0 && (
+            <span className="text-yellow-400 flex items-center gap-1">
+              <i className="fa-solid fa-spinner fa-spin text-[10px]" />
+              {generatingCount} generating...
+            </span>
+          )}
+          {readyCount > 0 && (
+            <span className="text-cyan-400">{readyCount} ready</span>
+          )}
+        </div>
+
+        <div className="flex-1" />
+
+        {/* Zoom slider */}
+        <div className="flex items-center gap-2">
+          <i className="fa-solid fa-image text-zinc-600 text-[10px]" />
+          <input
+            type="range"
+            min={10}
+            max={100}
+            value={zoom}
+            onChange={e => setZoom(Number(e.target.value))}
+            className="w-28 accent-cyan-500"
+            title={`Thumbnail size: ${thumbBaseH}px`}
+          />
+          <i className="fa-solid fa-image text-zinc-400 text-sm" />
+        </div>
+      </div>
+
+      {/* Gallery grid — Adobe Bridge style: show full images at natural aspect ratio */}
+      <div className="flex-1 overflow-auto p-4">
+        {compositions.length === 0 ? (
+          <div className="flex items-center justify-center h-full text-zinc-600 text-sm">
+            No compositions generated yet
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-3 content-start">
+            {sorted.map(comp => {
+              // Each card has a fixed-size area; the thumbnail renders inside using object-contain
+              const cardSize = thumbBaseH;
+
+              return (
+                <button
+                  key={comp.id}
+                  onClick={() => onSelect(comp.id)}
+                  className="group flex flex-col shrink-0 rounded-xl border border-zinc-700/50 bg-zinc-800/40 hover:border-cyan-600/50 hover:bg-cyan-600/5 transition-all overflow-hidden"
+                  style={{ width: cardSize + 16 }}
+                >
+                  {/* Thumbnail container — fixed square, image fits inside with contain */}
+                  <div
+                    className="relative flex items-center justify-center bg-zinc-950/50 p-1"
+                    style={{ width: cardSize + 16, height: cardSize }}
+                  >
+                    {comp.layers.length > 0 ? (
+                      <CompThumbnail
+                        composition={comp}
+                        width={cardSize + 14}
+                        height={cardSize - 2}
+                        contain
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center w-full h-full">
+                        {comp.status === 'generating' ? (
+                          <i className="fa-solid fa-spinner fa-spin text-yellow-500" />
+                        ) : (
+                          <i className="fa-solid fa-image text-zinc-700" />
+                        )}
+                      </div>
+                    )}
+                    {/* Hover overlay */}
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <span className="text-white text-xs font-medium bg-cyan-600 px-3 py-1.5 rounded-lg shadow-lg">
+                        <i className="fa-solid fa-pen-ruler mr-1.5" />
+                        Edit
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Info bar */}
+                  <div className="px-2 py-1.5 flex items-center gap-1.5 min-w-0">
+                    <div className={`w-2 h-2 rounded-full shrink-0 ${STATUS_COLORS[comp.status]}`} />
+                    <span className="text-[10px] text-zinc-400 font-medium truncate">{comp.width}×{comp.height}</span>
+                    <span className="text-[9px] text-zinc-600 truncate ml-auto">{STATUS_LABELS[comp.status] || comp.status}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export const BannerCompositionGrid: React.FC<BannerCompositionGridProps> = (props) => {
+  if (props.galleryMode) {
+    return <GalleryView {...props} />;
+  }
+  return <StripView {...props} />;
 };

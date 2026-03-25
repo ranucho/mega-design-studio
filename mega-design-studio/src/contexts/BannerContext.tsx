@@ -10,6 +10,7 @@ import {
   BANNER_PRESETS,
 } from '@/types';
 import { generateBannerLayout } from '@/services/gemini';
+import { getLayerZOrder } from '@/services/gemini/banner-rules';
 
 interface BannerContextType {
   project: BannerProject | null;
@@ -181,6 +182,9 @@ export const BannerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             textAlign: 'left' as const,
           };
         }).filter((l): l is BannerLayer => l !== null);
+
+        // Sort layers by z-order: background at bottom, CTA on top
+        layers.sort((a, b) => getLayerZOrder(a.role, a.name) - getLayerZOrder(b.role, b.name));
 
         compositions.push({
           id: crypto.randomUUID(),

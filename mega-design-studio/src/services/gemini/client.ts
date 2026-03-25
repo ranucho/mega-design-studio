@@ -2,9 +2,24 @@ import { GoogleGenAI } from "@google/genai";
 
 let genAI: GoogleGenAI | null = null;
 
+/** Get or set the API key at runtime. Checks localStorage, then env var. */
+export const getApiKey = (): string => {
+    return localStorage.getItem('gemini_api_key') || process.env.API_KEY || '';
+};
+
+export const setApiKey = (key: string) => {
+    localStorage.setItem('gemini_api_key', key);
+    genAI = null; // Force re-init with new key
+};
+
+export const hasApiKey = (): boolean => {
+    return getApiKey().length > 0;
+};
+
 export const getAI = (): GoogleGenAI => {
     if (!genAI) {
-        const key = process.env.API_KEY || '';
+        const key = getApiKey();
+        if (!key) throw new Error('No Gemini API key configured. Click the ⚙️ icon in the top bar to add your API key.');
         genAI = new GoogleGenAI({ apiKey: key });
     }
     return genAI;

@@ -1,6 +1,7 @@
 import { Type } from "@google/genai";
 import { getAI, parseDataUrl, retryOperation } from "./client";
 import { ExtractedElement, BannerLayer } from "@/types";
+import { ALL_COMPOSITION_RULES, getLayerZOrder, isWideStrip } from "./banner-rules";
 
 /** Analyze a banner image and detect all visual elements with bounding boxes and roles */
 export const analyzeBanner = async (
@@ -25,11 +26,16 @@ export const analyzeBanner = async (
 
 Think of it like reverse-engineering a Photoshop file — every element that a designer would have on its own layer.
 
+Think in THREE CATEGORIES to ensure complete coverage:
+1. TEXT — All text elements: headlines, titles, taglines, body copy, captions. NOT text inside buttons.
+2. UI — All interface elements: CTA buttons (with their text), logos, badges, ribbons, decorations, borders, sparkles, coins, gems.
+3. IMAGES — All pictorial elements: the background scene, characters/mascots, game screenshots, product shots, slot reels.
+
 For each element, return:
 - label: A short descriptive name (e.g., "Main Character", "Game Logo", "CTA Button", "Headline Text", "Speech Bubble", "Prize Badge")
 - role: One of: "background", "character", "text", "cta", "logo", "decoration", "other"
   • "background" — The main background layer (scene, gradient, environment). Exactly ONE.
-  • "character" — Any person, mascot, creature, animal, or main illustrated subject.
+  • "character" — Any person, mascot, creature, animal, or main illustrated subject. IMPORTANT: The bounding box MUST include the ENTIRE character from head to feet/tail. NEVER crop a character in the middle — if the character extends to the edge of the banner, extend the bbox all the way to that edge. Include ALL body parts, accessories, weapons, wings, tails, hats, hair, and shadows that are part of the character.
   • "text" — Headings, titles, body copy, taglines, captions. NOT text that is part of a button/CTA.
   • "cta" — Call-to-action buttons INCLUDING their text (e.g., "Play Now" button = ONE cta element, not button + separate text).
   • "logo" — Brand logos, game logos, company marks, app icons.
@@ -211,7 +217,9 @@ export const cropImageToRegion = (
 
 /**
  * Chroma-key: replace a solid background color with actual alpha transparency.
- * Kept for backwards compatibility / edge cases.
+ * Uses edge-based flood-fill (same approach as whiteToAlpha) so ONLY connected
+ * background pixels from the edges are removed — interior pixels matching the
+ * key color are preserved (e.g. green clothing, magenta details).
  */
 export const chromaKeyToAlpha = (
   imageDataUrl: string,
@@ -221,25 +229,73 @@ export const chromaKeyToAlpha = (
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
       const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
+      canvas.width = w;
+      canvas.height = h;
       const ctx = canvas.getContext('2d')!;
       ctx.drawImage(img, 0, 0);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, w, h);
       const d = imageData.data;
-      for (let i = 0; i < d.length; i += 4) {
-        const dr = d[i] - keyR;
-        const dg = d[i + 1] - keyG;
-        const db = d[i + 2] - keyB;
-        const dist = Math.sqrt(dr * dr + dg * dg + db * db);
-        if (dist < tolerance) {
-          d[i + 3] = 0;
-        } else if (dist < tolerance * 1.5) {
-          const alpha = Math.min(255, Math.round(((dist - tolerance) / (tolerance * 0.5)) * 255));
-          d[i + 3] = alpha;
+
+      const matchesKey = (idx: number) => {
+        const dr = d[idx * 4] - keyR;
+        const dg = d[idx * 4 + 1] - keyG;
+        const db = d[idx * 4 + 2] - keyB;
+        return Math.sqrt(dr * dr + dg * dg + db * db) < tolerance * 1.5;
+      };
+
+      // Flood-fill from edges
+      const isBg = new Uint8Array(w * h);
+      const queue: number[] = [];
+
+      for (let x = 0; x < w; x++) {
+        if (matchesKey(x)) { isBg[x] = 1; queue.push(x); }
+        const bot = (h - 1) * w + x;
+        if (matchesKey(bot)) { isBg[bot] = 1; queue.push(bot); }
+      }
+      for (let y = 1; y < h - 1; y++) {
+        const left = y * w;
+        if (matchesKey(left)) { isBg[left] = 1; queue.push(left); }
+        const right = y * w + w - 1;
+        if (matchesKey(right)) { isBg[right] = 1; queue.push(right); }
+      }
+
+      let qi = 0;
+      while (qi < queue.length) {
+        const idx = queue[qi++];
+        const x = idx % w, y = (idx - x) / w;
+        const neighbors = [
+          y > 0 ? idx - w : -1,
+          y < h - 1 ? idx + w : -1,
+          x > 0 ? idx - 1 : -1,
+          x < w - 1 ? idx + 1 : -1,
+        ];
+        for (const n of neighbors) {
+          if (n >= 0 && !isBg[n] && matchesKey(n)) {
+            isBg[n] = 1;
+            queue.push(n);
+          }
         }
       }
+
+      // Apply alpha only to flood-filled background pixels
+      for (let i = 0; i < w * h; i++) {
+        if (!isBg[i]) continue;
+        const pi = i * 4;
+        const dr = d[pi] - keyR;
+        const dg = d[pi + 1] - keyG;
+        const db = d[pi + 2] - keyB;
+        const dist = Math.sqrt(dr * dr + dg * dg + db * db);
+        if (dist < tolerance) {
+          d[pi + 3] = 0;
+        } else if (dist < tolerance * 1.5) {
+          const alpha = Math.min(255, Math.round(((dist - tolerance) / (tolerance * 0.5)) * 255));
+          d[pi + 3] = alpha;
+        }
+      }
+
       ctx.putImageData(imageData, 0, 0);
       resolve(canvas.toDataURL('image/png'));
     };
@@ -697,11 +753,31 @@ RULES:
  *
  *  For background: uses AI inpainting to remove foreground elements.
  *  @param attempt - retry attempt number (0=first, 1+=retry). Higher attempts use more temperature. */
+/** Find elements whose bboxes overlap or are near the target element */
+export const findNeighbors = (
+  target: { bbox: { x: number; y: number; w: number; h: number } },
+  allElements: Array<{ label: string; role: string; bbox: { x: number; y: number; w: number; h: number } }>,
+  expandPct = 10,
+): Array<{ label: string; role: string; bbox: { x: number; y: number; w: number; h: number } }> => {
+  const tx0 = target.bbox.x - expandPct;
+  const ty0 = target.bbox.y - expandPct;
+  const tx1 = target.bbox.x + target.bbox.w + expandPct;
+  const ty1 = target.bbox.y + target.bbox.h + expandPct;
+  return allElements.filter(el => {
+    if (el === target as any) return false;
+    if (el.role === 'background') return false;
+    const ex0 = el.bbox.x, ey0 = el.bbox.y;
+    const ex1 = el.bbox.x + el.bbox.w, ey1 = el.bbox.y + el.bbox.h;
+    return ex0 < tx1 && ex1 > tx0 && ey0 < ty1 && ey1 > ty0;
+  });
+};
+
 export const extractElement = async (
   imageDataUrl: string,
   element: { label: string; role: string; bbox: { x: number; y: number; w: number; h: number } },
   croppedImageDataUrl?: string,
   attempt = 0,
+  neighbors?: Array<{ label: string; role: string; bbox: { x: number; y: number; w: number; h: number } }>,
 ): Promise<string> => {
   const ai = getAI();
   const isBackground = element.role === 'background';
@@ -709,22 +785,23 @@ export const extractElement = async (
   if (isBackground) {
     // Background: send full image, ask AI to inpaint/remove all foreground elements
     const { mimeType, data } = parseDataUrl(imageDataUrl);
+
+    // Build exclusion list from neighbors so coins/decorations don't bleed into background
+    const fgList = neighbors && neighbors.length > 0
+      ? `\n\nFOREGROUND ELEMENTS TO REMOVE:\n${neighbors.map(n => `- "${n.label}" (${n.role})`).join('\n')}\nRemove ALL of these completely — no traces of any foreground element should remain.`
+      : '';
+
     const response = await retryOperation(() =>
       ai.models.generateContent({
         model: 'gemini-3.1-flash-image-preview',
         contents: {
           parts: [
             { inlineData: { mimeType, data } },
-            { text: `IMAGE PROCESSING TASK: Background Extraction / Inpainting.
+            { text: `Remove all foreground elements from this banner and output ONLY the clean background.
 
-This is a banner/advertisement image. Extract ONLY the background scene/environment.
-
-REQUIREMENTS:
-1. REMOVE every foreground element: all characters, mascots, text, headlines, logos, buttons, CTAs, ribbons, badges, speech bubbles, decorations.
-2. INPAINT the removed areas cleanly — fill with the surrounding background texture, gradient, or pattern so it looks natural.
-3. PRESERVE the background's atmosphere, lighting, colors, and mood exactly.
-4. Output at the SAME dimensions as input, filling the full canvas.
-5. The result should look like a clean empty background ready for new elements to be placed on top.` }
+Remove: characters, mascots, text, headlines, logos, buttons, CTAs, ribbons, badges, coins, decorations — everything except the background scene.
+Inpaint removed areas with the surrounding background texture/gradient so it looks natural.
+Output at the SAME dimensions as input.${fgList}` }
           ]
         },
         config: { responseModalities: ['IMAGE', 'TEXT'] }
@@ -742,58 +819,97 @@ REQUIREMENTS:
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // DIRECT AI ISOLATION (non-background elements)
-  // Same proven approach as isolateSymbol in the Symbol Gen tab:
+  // DIRECT AI ISOLATION — WHITE BACKGROUND (proven approach)
   // 1. Crop the element region from the banner
-  // 2. Send to AI: "isolate ONLY this element on white background"
-  // 3. AI returns clean isolated element on white
-  // 4. whiteToAlpha removes white → transparent
-  // 5. Auto-trim transparent borders
+  // 2. Send to AI: "isolate this element on white background"
+  // 3. whiteToAlpha (edge flood-fill) removes white → transparent
+  //    (flood-fill only removes white connected to edges, preserving
+  //    interior white content like white clothing, text, etc.)
+  // 4. Auto-trim transparent borders
   // ═══════════════════════════════════════════════════════════════
 
-  // Step 1: Crop the element region (canvas-based, pixel-perfect)
-  const cropDataUrl = croppedImageDataUrl || await cropImageToRegion(imageDataUrl, element.bbox, 15);
+  // Step 1: Crop the element region
+  // Wider padding for decorations (coins need space) and on retries
+  const isDecoration = element.role === 'decoration';
+  const padPercent = attempt >= 2 ? 35 : isDecoration ? 25 : 15;
+  const cropDataUrl = croppedImageDataUrl || await cropImageToRegion(imageDataUrl, element.bbox, padPercent);
   const { mimeType: cropMime, data: cropData } = parseDataUrl(cropDataUrl);
 
-  // Build role-specific isolation prompt
-  const roleIsolation: Record<string, string> = {
-    text: `Isolate ONLY the text/headline from this crop. Preserve the EXACT font, colors, effects (outlines, shadows, glow, gradients, 3D). Output it on a pure white background.`,
-    cta: `Isolate ONLY the call-to-action button from this crop. Include the button shape AND its text. Preserve EXACT colors, gradients, and effects. Output it on a pure white background.`,
-    logo: `Isolate ONLY the logo/brand mark from this crop. Preserve EXACT colors, details, and any accompanying text. Output it on a pure white background.`,
-    character: `Isolate ONLY the character/person/mascot from this crop. Include their COMPLETE body, clothing, accessories, held items. If any part is cropped or cut off, reconstruct it naturally. Output on a pure white background.`,
-    decoration: `Isolate ONLY this decorative element (badge, ribbon, coins, sparkles, etc.) from this crop. Preserve EXACT colors and details. Output it on a pure white background.`,
-    other: `Isolate ONLY this specific element from the crop. Remove all other elements and background. Preserve EXACT original appearance. Output it on a pure white background.`,
+  // Short, focused role-specific prompts — less is more with AI image gen
+  const rolePrompts: Record<string, string> = {
+    text: `Extract this text element onto a solid dark gray (#222222) background.
+
+CRITICAL — this is a VISUAL EXTRACTION, not re-typing:
+1. The text must look EXACTLY like a screenshot cut from the banner — same 3D extrusion, same gradient fills, same stroke/outline colors, same drop shadows, same glow effects, same perspective/angle.
+2. Output the text EXACTLY ONCE. Do NOT duplicate, mirror, or repeat it.
+3. Do NOT re-type, re-render, or redesign the text in a different font/style. COPY the pixels.
+4. The only change: replace the scene behind the text with solid dark gray #222222.
+5. Keep the text's own shadow, stroke, and glow effects — just remove the banner background scene.`,
+    cta: `Isolate ONLY this button from the crop onto a white background.
+Include the button shape and its text. Preserve exact colors and effects.`,
+    logo: `Isolate ONLY this logo from the crop onto a white background.
+Preserve exact colors, details, and any text.`,
+    character: `Isolate ONLY the character/person/mascot from this crop onto a white background.
+COMPLETELY REMOVE the background scene — no buildings, no interior, no sky, no patterns.
+Include the FULL character head to feet. If any part is cut off, complete it naturally.
+Do NOT add any outline, stroke, or border around the character.`,
+    decoration: `Isolate ONLY this decorative element from the crop onto a white background.
+Include the COMPLETE element — do NOT crop it at any edge.
+If it contains coins: keep them perfectly round, include entire coins/piles.`,
+    other: `Isolate ONLY this element from the crop onto a white background.
+Remove everything else. Preserve exact appearance.`,
   };
 
-  const isolationPrompt = roleIsolation[element.role] || roleIsolation.other;
+  const rolePrompt = rolePrompts[element.role] || rolePrompts.other;
 
-  // Step 2: Send BOTH the full banner (for context) AND the crop to AI
+  // Retry escalation
+  let retryNote = '';
+  if (attempt === 1) {
+    retryNote = '\n\nRETRY — Previous result was bad. Be more careful: remove ALL background, do NOT crop the element, do NOT add outlines/strokes.';
+  } else if (attempt === 2) {
+    retryNote = '\n\nRETRY #2 — Still failing. The background MUST be pure white. The element must be COMPLETE with no cropping. No outlines. No duplicating.';
+  } else if (attempt >= 3) {
+    retryNote = `\n\nFINAL RETRY — Start from a blank white canvas. Carefully reconstruct ONLY "${element.label}" matching its exact appearance in the original. Nothing else.`;
+  }
+
+  // Build neighbor exclusion block
+  const exclusion = neighbors && neighbors.length > 0
+    ? `\nDo NOT include these neighboring elements in the output: ${neighbors.map(n => `"${n.label}"`).join(', ')}.`
+    : '';
+
   const fullParsed = parseDataUrl(imageDataUrl);
-  const temperature = Math.min(0.2 + attempt * 0.3, 1.0);
+  const temperature = Math.min(0.15 + attempt * 0.25, 1.2);
+
+  // Characters: send ONLY the crop (no full banner context).
+  // The full banner confuses the AI into reproducing the background scene.
+  // Same proven approach as isolateSymbol in Symbol Gen tab.
+  const isCharacter = element.role === 'character';
+  const contentParts = isCharacter
+    ? [
+        { inlineData: { mimeType: cropMime, data: cropData } },
+        { text: `IMAGE PROCESSING TASK: Background Removal / Character Isolation.
+
+INPUT: A crop from a banner containing "${element.label}".
+GOAL: Output the EXACT SAME character on a SOLID WHITE background RGB(255,255,255).
+
+CRITICAL CONSTRAINTS:
+1. BACKGROUND: Must be PURE WHITE #FFFFFF — completely remove the scene/environment behind the character.
+2. PRESERVE: Do not re-draw or redesign the character. Keep the original art style, colors, pose, and details exactly as they are.
+3. COMPLETENESS: Include the FULL character from head to feet — all clothing, accessories, held items, hair, hat.
+4. NO OUTLINES: Do NOT add any stroke, border, outline, or glow around the character.
+5. NO CROPPING: If any body part is cut off at the edge, reconstruct it naturally.${exclusion}${retryNote}` },
+      ]
+    : [
+        { inlineData: { mimeType: fullParsed.mimeType, data: fullParsed.data } },
+        { text: `Full banner for context. Below is a crop containing "${element.label}" (${element.role}).` },
+        { inlineData: { mimeType: cropMime, data: cropData } },
+        { text: `${rolePrompt}${exclusion}${retryNote}` },
+      ];
 
   const response = await retryOperation(() =>
     ai.models.generateContent({
       model: 'gemini-3.1-flash-image-preview',
-      contents: {
-        parts: [
-          { inlineData: { mimeType: fullParsed.mimeType, data: fullParsed.data } },
-          { text: `Above is the FULL banner/advertisement for context. Below is a CROPPED REGION from it.` },
-          { inlineData: { mimeType: cropMime, data: cropData } },
-          { text: `IMAGE PROCESSING TASK: Element Isolation.
-
-This cropped region contains "${element.label}" (${element.role}).
-
-${isolationPrompt}
-
-CRITICAL RULES:
-1. Output ONLY the isolated element — NO other elements, NO background scene, NO other text.
-2. The element must look EXACTLY like it does in the original — same art style, same colors, same effects.
-3. Background must be PURE WHITE #FFFFFF everywhere except the element itself.
-4. Do NOT crop or cut off any part of the element.
-5. Do NOT add margins, borders, or extra space.
-6. Preserve the original aspect ratio of the element.` },
-        ],
-      },
+      contents: { parts: contentParts },
       config: {
         responseModalities: ['IMAGE', 'TEXT'],
         temperature,
@@ -807,8 +923,40 @@ CRITICAL RULES:
       const rawMime = part.inlineData.mimeType || 'image/png';
       const rawDataUrl = `data:${rawMime};base64,${part.inlineData.data}`;
 
-      // Step 3: Remove white background → transparent
-      const transparent = await whiteToAlpha(rawDataUrl, 30);
+      // Step 3: Remove background → transparent
+      // Text: detect if AI used dark gray or white bg, remove accordingly
+      // Others: white bg + whiteToAlpha
+      let transparent: string;
+      if (element.role === 'text') {
+        // Detect dominant corner color to determine which bg was used
+        const detectBg = await new Promise<'dark' | 'white'>((resolve) => {
+          const testImg = new Image();
+          testImg.onload = () => {
+            const c = document.createElement('canvas');
+            c.width = testImg.naturalWidth; c.height = testImg.naturalHeight;
+            const cx = c.getContext('2d')!;
+            cx.drawImage(testImg, 0, 0);
+            // Sample 4 corners
+            const samples = [
+              cx.getImageData(0, 0, 1, 1).data,
+              cx.getImageData(c.width - 1, 0, 1, 1).data,
+              cx.getImageData(0, c.height - 1, 1, 1).data,
+              cx.getImageData(c.width - 1, c.height - 1, 1, 1).data,
+            ];
+            const avgBrightness = samples.reduce((sum, d) => sum + (d[0] + d[1] + d[2]) / 3, 0) / 4;
+            resolve(avgBrightness < 128 ? 'dark' : 'white');
+          };
+          testImg.onerror = () => resolve('white');
+          testImg.src = rawDataUrl;
+        });
+        if (detectBg === 'dark') {
+          transparent = await chromaKeyToAlpha(rawDataUrl, 0x22, 0x22, 0x22, 70);
+        } else {
+          transparent = await whiteToAlpha(rawDataUrl, 30);
+        }
+      } else {
+        transparent = await whiteToAlpha(rawDataUrl, 30);
+      }
 
       // Step 4: Auto-trim transparent borders
       const trimmed = await autoTrimTransparent(transparent, 2);
@@ -871,6 +1019,21 @@ ${config.characterRef ? 'Use the second image as the new character reference.' :
 ${config.palette ? `COLOR PALETTE: ${config.palette}` : 'Derive colors from the theme.'}
 TEXT CHANGES:\n${textChangesStr}
 ELEMENTS TO KEEP: ${config.keepElements?.join(', ') || 'None — reskin everything.'}
+
+COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL:
+- Use a RICH, VIBRANT colour palette with HIGH CONTRAST between all elements.
+- The background must clearly contrast with ALL foreground elements (characters, text, CTA buttons, logos).
+- CTA buttons must POP — use bold, saturated colours (gold, red, bright green) with strong outlines or glow effects.
+- Text must be HIGHLY READABLE against its background — use drop shadows, outlines, or contrasting colours.
+- Characters/mascots should have bright, saturated colours with visible edges — NO blending into the background.
+- Decorative elements (sparkles, coins, badges) should have glow or shine effects to stand out.
+- AVOID low-contrast muddy palettes. AVOID monochrome or washed-out colours.
+- Think MOBILE GAMING AD: every element must be instantly recognizable at small sizes.
+- The overall image must look PROFESSIONAL, POLISHED, and APPEALING with rich lighting and rendering.
+
+LOGO RULES:
+- You may slightly resize or sharpen the logo to improve clarity, but do NOT change the logo design, colors, fonts, or add new elements to it. The logo must remain recognizable and identical in content.
+
 Maintain the EXACT SAME visual layout, spacing, and element sizes as the original. Output at same dimensions.`
   });
 
@@ -890,6 +1053,99 @@ Maintain the EXACT SAME visual layout, spacing, and element sizes as the origina
     }
   }
   throw new Error('Failed to generate reskinned banner');
+};
+
+// ============================================================================
+// SPARKLE — AI final touch & rendering pass
+// ============================================================================
+
+/**
+ * "Sparkle" pass: sends a rendered banner composition to AI for a final
+ * polishing touch. Keeps the image exactly as-is but adds professional
+ * rendering: subtle light effects on CTA/screenshot, depth-of-field,
+ * color grading, and a designer-finish look.
+ */
+export interface FineTuneOptions {
+  /** Layer names/roles to enhance (checked = fine tune this element) */
+  enhanceLayers: string[];
+  /** Layer names/roles to protect (unchecked = keep exactly as-is) */
+  protectLayers: string[];
+  /** Custom text instructions */
+  customInstructions: string;
+}
+
+export const DEFAULT_FINE_TUNE: FineTuneOptions = {
+  enhanceLayers: [],
+  protectLayers: [],
+  customInstructions: '',
+};
+
+export const sparkleBanner = async (
+  compositionImageDataUrl: string,
+  options: FineTuneOptions = DEFAULT_FINE_TUNE,
+): Promise<string> => {
+  const ai = getAI();
+  const { mimeType, data } = parseDataUrl(compositionImageDataUrl);
+
+  // Build enhance/protect blocks from layer selections
+  // Logo is ALWAYS protected — move it from enhance to protect automatically
+  const logoNames = options.enhanceLayers.filter(name => name.toLowerCase().includes('logo'));
+  const actualEnhance = options.enhanceLayers.filter(name => !name.toLowerCase().includes('logo'));
+  const actualProtect = [...new Set([...options.protectLayers, ...logoNames])];
+
+  const enhanceBlock = actualEnhance.length > 0
+    ? `\n\nELEMENTS TO ENHANCE (apply rendering polish to these):\n${actualEnhance.map((l, i) => `${i + 1}. "${l}" — Improve rendering quality: better lighting, sharper details, subtle glow/shine, professional finish.`).join('\n')}`
+    : '';
+
+  const protectBlock = actualProtect.length > 0
+    ? `\n\n🚫 PROTECTED ELEMENTS — DO NOT TOUCH THESE AT ALL:\n${actualProtect.map((l, i) => `${i + 1}. "${l}" — ABSOLUTELY NO CHANGES. Same exact colors, same rendering style, same shape, same everything. If this is a green button it stays green. If it's 2D it stays 2D. Copy these pixels unchanged.`).join('\n')}\nThis is the HIGHEST PRIORITY rule — protected elements must be pixel-identical to the input.`
+    : '';
+
+  const customBlock = options.customInstructions.trim()
+    ? `\n\nADDITIONAL INSTRUCTIONS FROM THE USER (highest priority):\n${options.customInstructions.trim()}`
+    : '';
+
+  const response = await retryOperation(() =>
+    ai.models.generateContent({
+      model: 'gemini-3.1-flash-image-preview',
+      contents: {
+        parts: [
+          { inlineData: { mimeType, data } },
+          {
+            text: `You are a senior graphic designer applying a FINAL POLISH PASS to this banner advertisement.
+
+YOUR TASK: Keep the image EXACTLY as it is — same layout, same text, same elements, same positions — but enhance the RENDERING QUALITY of selected elements to make it look like a designer spent time on final touch-up.
+
+Enhancements include: better lighting, subtle glow/shine effects, sharper details, professional color grading, and a polished finish.${enhanceBlock}${protectBlock}
+
+CRITICAL RULES:
+- DO NOT change the layout, text content, element positions, or overall composition.
+- DO NOT add new elements, remove existing elements, or change any text.
+- DO NOT change the aspect ratio or dimensions.
+- The result should look like the SAME banner, just with professional polish.
+- Keep changes SUBTLE — this is a rendering pass, not a redesign.
+- Output the image at the EXACT SAME pixel dimensions as the input. Do NOT resize.
+- DO NOT change any background colors (white stays white, black stays black, etc.).
+- DO NOT change the art style (2D stays 2D, cartoon stays cartoon, 3D stays 3D).
+- DO NOT change element colors (a green button stays green, a red badge stays red).
+- LOGO PROTECTION (ALWAYS ENFORCED — even if not in the protected list): NEVER modify, redesign, or add effects to any logo. The logo must be pixel-identical to the input. The ONLY acceptable change is a very subtle light/shine/sparkle reflection. No new shapes, no color changes, no extra elements, no artifacts around the logo.
+- COIN PROTECTION: If the image contains gold coins — they MUST remain perfectly round. Do NOT distort coins.
+- NO ARTIFACTS: Do not add halos, blurs, smudges, or distortions around any element edges. Keep all edges clean and sharp.${customBlock}`
+          }
+        ],
+      },
+      config: { responseModalities: ['IMAGE', 'TEXT'] }
+    })
+  );
+
+  const responseParts = response.candidates?.[0]?.content?.parts || [];
+  for (const part of responseParts) {
+    if (part.inlineData?.data) {
+      const resMime = part.inlineData.mimeType || 'image/png';
+      return `data:${resMime};base64,${part.inlineData.data}`;
+    }
+  }
+  throw new Error('Fine tune pass failed — no image returned');
 };
 
 // ============================================================================
@@ -941,7 +1197,9 @@ export const generateBannerLayout = async (
     } : null,
   }));
 
-  const prompt = `You are a senior banner ad designer. Design the layout for a ${targetWidth}×${targetHeight}px (${aspectLabel}) banner.
+  const isStrip = isWideStrip(targetWidth, targetHeight);
+
+  const prompt = `You are a senior banner ad designer. Design the layout for a ${targetWidth}×${targetHeight}px (${aspectLabel}) banner.${isStrip ? ' THIS IS A WIDE STRIP BANNER — follow the strip layout rules below.' : ''}
 
 SOURCE BANNER: ${sourceWidth}×${sourceHeight}px. The following elements were extracted from it:
 
@@ -951,18 +1209,12 @@ DESIGN THIS ${targetWidth}×${targetHeight} COMPOSITION:
 
 For each element, return its position and uniform scale factor. The scale is relative to the element's native dimensions — a scale of 1.0 means the element renders at its original pixel size.
 
-DESIGN RULES (follow these strictly):
-1. BACKGROUND always fills the entire canvas: x=0, y=0, scaleX=targetWidth/nativeWidth, scaleY=targetHeight/nativeHeight (this is the ONE exception where scaleX≠scaleY is allowed — backgrounds stretch to fill).
-2. ALL other elements use UNIFORM scale: scaleX === scaleY (preserve aspect ratio, NEVER stretch).
-3. HIERARCHY: The main visual element (character, game screenshot, game tray) should be LARGE and prominent — it's the hero of the banner. Don't shrink it to a tiny corner.
-4. TEXT/HEADLINE: Must be readable. Place near the top or in a visually prominent position. Scale it large enough to be legible at the target size.
-5. CTA BUTTON: Always visible and clickable. Place at the bottom or in a clear action area. Never too small.
-6. LOGO: Keep at reasonable size — not too large, not too small. Typically top-left or top-right.
-7. DECORATIONS: Fill remaining space, add visual interest. Can be behind other elements.
-8. NO OVERLAPPING of key elements (text shouldn't cover the hero element, CTA shouldn't be hidden).
-9. Elements should have breathing room — don't cram everything edge-to-edge.
-10. ALL extracted elements should be visible (visible: true) unless the canvas is too small to fit them readably (e.g., a 320×50 mobile banner can't fit everything).
-11. Think about what makes this banner EFFECTIVE as an advertisement — clear message, strong visual, obvious CTA.
+TECHNICAL RULES:
+1. BACKGROUND uses COVER mode (like CSS background-size:cover): uniform scale to FILL the canvas, then center it. Calculate: scale = Math.max(targetWidth/nativeWidth, targetHeight/nativeHeight). Then x = (targetWidth - nativeWidth*scale)/2, y = (targetHeight - nativeHeight*scale)/2. scaleX === scaleY (NO stretching — background must maintain its proportions).
+2. ALL elements use UNIFORM scale: scaleX === scaleY (preserve aspect ratio, NEVER stretch any element).
+3. ALL extracted elements MUST appear (visible: true). Even on small canvases, include every element. NEVER set visible to false.${isStrip ? ' Exception: game shots/screenshots can be hidden on strip banners.' : ''}
+
+${ALL_COMPOSITION_RULES}
 
 Return a JSON array with one entry per element:
 [{ "elementId": "...", "x": number, "y": number, "scaleX": number, "scaleY": number, "visible": boolean }]
@@ -1005,29 +1257,38 @@ x,y are the TOP-LEFT corner position in pixels. Scale is a multiplier on native 
 
     for (const el of elements) {
       const aiLayout = parsed.find((p: any) => p.elementId === el.id);
+      const isBackground = el.role === 'background';
+
       if (aiLayout) {
-        // Enforce uniform scale for non-background
         const sx = Math.max(0.01, aiLayout.scaleX || 1);
         const sy = Math.max(0.01, aiLayout.scaleY || 1);
-        const isBackground = el.role === 'background';
+
+        // ALL elements use uniform scale — even backgrounds (cover mode)
+        const uniformScale = isBackground
+          ? Math.max(targetWidth / el.nativeWidth, targetHeight / el.nativeHeight) // cover
+          : Math.min(sx, sy); // use AI's suggestion but enforce uniform
+
+        // Background: center it (cover mode crops edges)
+        const bgX = isBackground ? Math.round((targetWidth - el.nativeWidth * uniformScale) / 2) : Math.round(Math.max(0, aiLayout.x || 0));
+        const bgY = isBackground ? Math.round((targetHeight - el.nativeHeight * uniformScale) / 2) : Math.round(Math.max(0, aiLayout.y || 0));
 
         results.push({
           elementId: el.id,
-          x: Math.round(Math.max(0, aiLayout.x || 0)),
-          y: Math.round(Math.max(0, aiLayout.y || 0)),
-          scaleX: isBackground ? sx : Math.min(sx, sy), // Uniform for non-bg
-          scaleY: isBackground ? sy : Math.min(sx, sy),
-          visible: aiLayout.visible !== false,
+          x: bgX,
+          y: bgY,
+          scaleX: isBackground ? uniformScale : uniformScale,
+          scaleY: isBackground ? uniformScale : uniformScale,
+          visible: true,
         });
       } else {
         // AI didn't return this element — use sensible defaults
-        const isBackground = el.role === 'background';
+        const coverScale = Math.max(targetWidth / el.nativeWidth, targetHeight / el.nativeHeight);
         results.push({
           elementId: el.id,
-          x: 0,
-          y: 0,
-          scaleX: isBackground ? targetWidth / el.nativeWidth : 0.5,
-          scaleY: isBackground ? targetHeight / el.nativeHeight : 0.5,
+          x: isBackground ? Math.round((targetWidth - el.nativeWidth * coverScale) / 2) : 0,
+          y: isBackground ? Math.round((targetHeight - el.nativeHeight * coverScale) / 2) : 0,
+          scaleX: isBackground ? coverScale : 0.5,
+          scaleY: isBackground ? coverScale : 0.5,
           visible: true,
         });
       }
@@ -1051,10 +1312,14 @@ function fallbackLayout(
 
   for (const el of elements) {
     if (el.role === 'background') {
+      // Cover mode: uniform scale, centered
+      const coverScale = Math.max(targetWidth / el.nativeWidth, targetHeight / el.nativeHeight);
       results.push({
-        elementId: el.id, x: 0, y: 0,
-        scaleX: targetWidth / el.nativeWidth,
-        scaleY: targetHeight / el.nativeHeight,
+        elementId: el.id,
+        x: Math.round((targetWidth - el.nativeWidth * coverScale) / 2),
+        y: Math.round((targetHeight - el.nativeHeight * coverScale) / 2),
+        scaleX: coverScale,
+        scaleY: coverScale,
         visible: true,
       });
     } else {

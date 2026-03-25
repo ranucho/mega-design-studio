@@ -3,6 +3,7 @@ import { useExtractor } from '@/contexts/ExtractorContext';
 import { useApp } from '@/contexts/AppContext';
 import { generateBackgroundImage, generateFromCrop, generateAnimation } from '@/services/gemini';
 import { ReferenceAsset, AspectRatio } from '@/types';
+import { AspectRatioSelector } from '@/components/shared/AspectRatioSelector';
 import { VideoFullscreen } from '@/components/shared/VideoFullscreen';
 
 type DragHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'move' | 'create';
@@ -54,7 +55,7 @@ export const BackgroundStudio: React.FC = () => {
     }
   };
 
-  // --- Load from Lab ---
+  // --- Load from Assets ---
   const handleLoadFromLab = (asset: ReferenceAsset) => {
     updateState({ sourceImage: asset.url, generatedImage: null, crop: { x: 10, y: 10, w: 80, h: 60 } });
     setShowLabPicker(false);
@@ -181,18 +182,15 @@ export const BackgroundStudio: React.FC = () => {
             <i className="fas fa-image text-blue-500" /> Background Studio
           </h1>
           <p className="text-sm text-zinc-400">
-            Upload or load from Lab &rarr; Generate &rarr; Animate.
+            Upload or load from Assets &rarr; Generate &rarr; Animate.
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center bg-zinc-900 rounded-lg p-1 border border-zinc-700">
-            {RATIOS.map(r => (
-              <button key={r} onClick={() => updateState({ aspectRatio: r })}
-                className={`px-3 py-1.5 text-xs font-bold rounded transition-colors ${aspectRatio === r ? 'bg-blue-600 text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}>
-                {r}
-              </button>
-            ))}
-          </div>
+          <AspectRatioSelector
+            value={aspectRatio}
+            onChange={(r) => updateState({ aspectRatio: r as any })}
+            options={RATIOS}
+          />
         </div>
       </div>
 
@@ -202,7 +200,7 @@ export const BackgroundStudio: React.FC = () => {
         <div className="flex flex-col gap-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6">
           <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500">1. Source Image</h3>
 
-          {/* Upload + Load from Lab buttons */}
+          {/* Upload + Load from Assets buttons */}
           <div className="flex gap-3">
             <label className="flex-1 flex flex-col items-center justify-center h-28 border-2 border-dashed border-zinc-700 rounded-xl hover:border-blue-500 hover:bg-zinc-800/50 transition-all cursor-pointer group">
               <i className="fas fa-upload text-xl text-zinc-600 group-hover:text-blue-400 mb-1" />
@@ -215,7 +213,7 @@ export const BackgroundStudio: React.FC = () => {
               className="flex-1 flex flex-col items-center justify-center h-28 border-2 border-dashed border-zinc-700 rounded-xl hover:border-blue-500 hover:bg-zinc-800/50 transition-all disabled:opacity-30 group"
             >
               <i className="fas fa-flask text-xl text-zinc-600 group-hover:text-blue-400 mb-1" />
-              <span className="text-[10px] font-bold text-zinc-500 group-hover:text-zinc-300 uppercase">Load from Lab</span>
+              <span className="text-[10px] font-bold text-zinc-500 group-hover:text-zinc-300 uppercase">Load from Assets</span>
               {labAssets.length > 0 && (
                 <span className="bg-blue-600 text-white px-2 py-0.5 rounded-full text-[9px] mt-1">{labAssets.length}</span>
               )}
@@ -371,7 +369,7 @@ export const BackgroundStudio: React.FC = () => {
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-3xl w-full max-h-[80vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center p-6 border-b border-zinc-800">
               <h3 className="text-lg font-black uppercase tracking-widest text-white flex items-center gap-2">
-                <i className="fas fa-flask text-blue-500" /> Select from Lab
+                <i className="fas fa-folder-open text-blue-500" /> Load from Assets
               </h3>
               <button onClick={() => setShowLabPicker(false)} className="text-zinc-500 hover:text-white"><i className="fas fa-times" /></button>
             </div>

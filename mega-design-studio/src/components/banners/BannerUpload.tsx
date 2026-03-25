@@ -1,5 +1,6 @@
 import React, { useRef, useState, useCallback } from 'react';
 import { useBanner } from '@/contexts/BannerContext';
+import { BannerLuckyReskin } from './BannerLuckyReskin';
 import { BannerMode } from '@/types';
 
 export const BannerUpload: React.FC = () => {
@@ -7,6 +8,11 @@ export const BannerUpload: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [mode, setMode] = useState<BannerMode>('resize');
+  const [showLuckyReskin, setShowLuckyReskin] = useState(false);
+  const [showBeforeAfter, setShowBeforeAfter] = useState(false);
+
+  const hasCompositions = (project?.compositions?.length ?? 0) > 0;
+  const isReskinned = !!project?.originalImage;
 
   const handleFile = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) return;
@@ -40,7 +46,13 @@ export const BannerUpload: React.FC = () => {
   if (project?.sourceImage) {
     return (
       <div className="flex flex-col items-center gap-6 p-8 max-w-3xl mx-auto">
-        <div className="relative rounded-xl overflow-hidden border border-zinc-700 bg-zinc-900 shadow-lg">
+        {/* Banner preview — click to see before/after when reskinned */}
+        <div
+          className={`relative rounded-xl overflow-hidden border bg-zinc-900 shadow-lg ${
+            isReskinned ? 'border-purple-600/50 cursor-pointer' : 'border-zinc-700'
+          }`}
+          onClick={isReskinned ? () => setShowBeforeAfter(true) : undefined}
+        >
           <img
             src={project.sourceImage}
             alt="Source banner"
@@ -49,7 +61,41 @@ export const BannerUpload: React.FC = () => {
           <div className="absolute top-3 right-3 bg-black/70 text-xs text-zinc-300 px-2 py-1 rounded">
             {project.sourceWidth} x {project.sourceHeight}
           </div>
+          {isReskinned && (
+            <div className="absolute bottom-3 left-3 flex items-center gap-2">
+              <span className="px-2.5 py-1 rounded-lg bg-purple-600/90 text-[10px] font-bold text-white backdrop-blur-sm">
+                <i className="fa-solid fa-palette mr-1" /> Reskinned
+              </span>
+              <span className="px-2.5 py-1 rounded-lg bg-black/60 text-[10px] text-zinc-300 backdrop-blur-sm">
+                Click to compare
+              </span>
+            </div>
+          )}
         </div>
+
+        {/* Before/After lightbox */}
+        {showBeforeAfter && project.originalImage && (
+          <div className="fixed inset-0 z-[90] bg-black/90 flex items-center justify-center p-8 cursor-pointer" onClick={() => setShowBeforeAfter(false)}>
+            <div className="relative max-w-[90vw] max-h-[85vh] flex flex-col items-center gap-4" onClick={e => e.stopPropagation()}>
+              <button onClick={() => setShowBeforeAfter(false)}
+                className="absolute -top-2 -right-2 z-10 w-8 h-8 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center">
+                <i className="fa-solid fa-xmark" />
+              </button>
+              <div className="flex items-start gap-6 overflow-auto">
+                <div className="flex flex-col items-center gap-2">
+                  <span className="text-xs text-zinc-500 uppercase tracking-wider">Before (Original)</span>
+                  <img src={project.originalImage} alt="Original" className="rounded-lg border border-zinc-700/50 shadow-2xl"
+                    style={{ maxHeight: '70vh', maxWidth: '42vw', objectFit: 'contain' }} />
+                </div>
+                <div className="flex flex-col items-center gap-2">
+                  <span className="text-xs text-purple-400 uppercase tracking-wider font-medium">After (Reskinned)</span>
+                  <img src={project.sourceImage} alt="Reskinned" className="rounded-lg border border-purple-600/30 shadow-2xl"
+                    style={{ maxHeight: '70vh', maxWidth: '42vw', objectFit: 'contain' }} />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Mode selector */}
         <div className="flex gap-2 bg-zinc-900 rounded-lg p-1 border border-zinc-700">
@@ -84,6 +130,15 @@ export const BannerUpload: React.FC = () => {
           >
             Choose Different Image
           </button>
+          {hasCompositions && (
+            <button
+              onClick={() => setShowLuckyReskin(true)}
+              className="px-5 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-all shadow-lg shadow-purple-600/20 flex items-center gap-1.5"
+            >
+              <i className="fa-solid fa-palette" />
+              Reskin
+            </button>
+          )}
           <button
             onClick={() => setStage(mode === 'reskin' ? 'reskin' : 'extract')}
             className={`px-6 py-2 text-sm font-medium text-white rounded-lg transition-colors shadow-lg ${
@@ -96,6 +151,9 @@ export const BannerUpload: React.FC = () => {
             <i className="fa-solid fa-arrow-right ml-2" />
           </button>
         </div>
+        {showLuckyReskin && (
+          <BannerLuckyReskin onClose={() => setShowLuckyReskin(false)} />
+        )}
       </div>
     );
   }
