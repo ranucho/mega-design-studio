@@ -248,7 +248,10 @@ export const BannerExtractor: React.FC = () => {
   const [extractingIds, setExtractingIds] = useState<Set<number>>(new Set());
   const [retryingElementIds, setRetryingElementIds] = useState<Set<string>>(new Set());
   const [retryCountMap, setRetryCountMap] = useState<Record<string, number>>({});
-  const [extractedCount, setExtractedCount] = useState(0);
+  const [extractedCount, setExtractedCount] = useState(() => {
+    // Initialize from existing extracted elements so counter isn't stale after tab switch
+    return project?.extractedElements.length || 0;
+  });
   const [failedIds, setFailedIds] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const hasStarted = useRef(false);
@@ -416,14 +419,16 @@ export const BannerExtractor: React.FC = () => {
         const fullBodyPrompt = `CHARACTER EXTRACTION & FULL BODY GENERATION:
 Look at this cropped image — it contains a character (or part of a character).
 Your task:
-1. IDENTIFY the character "${el.label}" in the crop
+1. LOOK at the character VISUALLY in this crop. Do NOT rely on any text label — extract EXACTLY what you SEE in the image.
 2. REMOVE all background elements — output on a SOLID WHITE background (#FFFFFF)
 3. GENERATE THE COMPLETE FULL BODY of this character from head to toe, even if only a portion is visible
-4. Maintain the EXACT same art style, colors, outfit, features, and design language
-5. Full body visible, centered on the canvas
-6. The character should occupy about 80% of the canvas height
-7. Do NOT add any outline, stroke, or border around the character
-Output: A clean, full-body character on pure white background.`;
+4. Maintain the EXACT same art style, colors, outfit, features, pose, and design language as shown in the crop
+5. The character must look IDENTICAL to what is in the crop — same person/creature, same clothing, same pose direction
+6. Full body visible, centered on the canvas
+7. The character should occupy about 80% of the canvas height
+8. Do NOT add any outline, stroke, or border around the character
+9. Do NOT change the character's identity, profession, species, or appearance in any way
+Output: A clean, full-body character on pure white background that matches EXACTLY what is shown in the crop.`;
         const rawResult = await modifyImage(cropDataUrl, fullBodyPrompt, '9:16', []);
         const transparent = await whiteToAlpha(rawResult, 30);
         const trimmed = await autoTrimTransparent(transparent, 2);

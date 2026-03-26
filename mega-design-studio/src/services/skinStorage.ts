@@ -240,14 +240,21 @@ export function loadBannerSkinIntoProject(
   setProject: React.Dispatch<React.SetStateAction<BannerProject | null>>,
 ) {
   setProject(prev => {
-    if (!prev) return null;
     // Re-map composition layers to point to new extracted element data URLs
-    const updatedComps: BannerComposition[] = (skin.compositions.length > 0 ? skin.compositions : prev.compositions).map(comp => ({
+    // Use skin's compositions if available, otherwise try to update prev's compositions
+    const baseComps = skin.compositions.length > 0
+      ? skin.compositions
+      : (prev?.compositions || []);
+
+    const updatedComps: BannerComposition[] = baseComps.map(comp => ({
       ...comp,
       layers: comp.layers.map(layer => {
-        const newEl = skin.extractedElements.find(e => e.label === layer.name);
+        const layerName = layer.name.trim().toLowerCase();
+        const newEl = skin.extractedElements.find(e => e.label.trim().toLowerCase() === layerName);
         if (!newEl || newEl.dataUrl === layer.src) return layer;
-        const scaleAdj = layer.nativeWidth > 0 ? (layer.nativeWidth * layer.scaleX) / newEl.nativeWidth : layer.scaleX;
+        const scaleAdj = layer.nativeWidth > 0 && newEl.nativeWidth > 0
+          ? (layer.nativeWidth * layer.scaleX) / newEl.nativeWidth
+          : layer.scaleX;
         return {
           ...layer,
           src: newEl.dataUrl,
@@ -261,14 +268,17 @@ export function loadBannerSkinIntoProject(
       status: 'edited' as const,
     }));
 
+    // Build project from skin data — works even if prev is null
     return {
-      ...prev,
+      ...(prev || {} as BannerProject),
       sourceImage: skin.sourceImage,
       sourceWidth: skin.sourceWidth,
       sourceHeight: skin.sourceHeight,
       detectedElements: skin.detectedElements,
       extractedElements: skin.extractedElements,
       compositions: updatedComps,
+      isExtracting: false,
+      stage: (prev?.stage || 'extract') as any,
     };
   });
 }

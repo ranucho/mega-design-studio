@@ -56,10 +56,10 @@ export const NAV_GROUPS = [
   {
     id: 'slots',
     label: 'Slots Generator',
-    icon: 'fa-dice',
+    icon: 'fa-gem',
     color: 'emerald',
     children: [
-      { id: 'toolkit', label: 'Slots Generator', icon: 'fa-dice' },
+      { id: 'toolkit', label: 'Slots Generator', icon: 'fa-gem' },
     ],
   },
   {

@@ -60,9 +60,23 @@ STRIP BANNER EXCEPTIONS:
 // ════════════════════════════════════════════════════════════════
 // COMBINED RULES — fed to the AI layout engine
 // ════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════
+// RESKIN RULES — governs how reskinned images must match the source
+// ════════════════════════════════════════════════════════════════
+export const RESKIN_RULES = `
+RESKIN COMPOSITION RULES (these are MANDATORY):
+1. LAYOUT PRESERVATION: The reskinned image must maintain the exact same composition, layout, and element placement as the source image. Every element must be in the same position, same size, and same proportions.
+2. CHARACTER/OBJECT CONSISTENCY: If the source image has a large character or object (e.g. above the slot area or as the main visual), the reskin MUST have a character or object of the SAME SIZE, LAYOUT, and COMPOSITION. You CANNOT shrink a face into a full torso, or turn a close-up into a wide shot. Match the framing exactly.
+3. NO INVENTED TEXT: If the source image does NOT contain decorative text or a title/headline, the reskin MUST NOT generate any text. Only reskin text that already exists in the source.
+4. BRAND LOGOS ARE SACRED: Company/brand logos in the corners (not game-specific logos on the reel itself) MUST NOT be changed, removed, or replaced. These are brand identities and are off-limits for reskinning. If a logo appears in a corner, keep it exactly as-is or omit that area from generation.
+5. STYLE MATCHING: The reskin should match the art style, rendering quality, and visual fidelity of the source. If the source is highly detailed 3D-rendered art, the reskin must also be highly detailed 3D-rendered art. Do not downgrade quality.
+6. ELEMENT COUNT: The number of distinct visual elements must match. If the source has 5 slot symbols, the reskin must also produce exactly 5 slot symbols. Do not add or remove elements.
+`;
+
 export const ALL_COMPOSITION_RULES = `${LAYER_ORDER_RULES}
 ${LAYOUT_RULES_GENERAL}
-${LAYOUT_RULES_STRIP}`;
+${LAYOUT_RULES_STRIP}
+${RESKIN_RULES}`;
 
 /**
  * Determine the layer z-order index for a given role.

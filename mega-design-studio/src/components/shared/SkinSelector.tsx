@@ -166,7 +166,7 @@ const SkinSelectorUI: React.FC<SkinSelectorUIProps> = ({
           <span className="text-zinc-300 truncate max-w-[120px]">
             {activeSkin?.name || 'Skins'}
           </span>
-          <span className="text-zinc-600 text-xs">({skins.length})</span>
+          <span className={`text-xs font-semibold ${skins.length > 0 ? 'text-amber-400' : 'text-zinc-500'}`}>({skins.length})</span>
           <i className={`fa-solid fa-chevron-down text-xs text-zinc-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </button>
 
