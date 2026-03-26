@@ -875,7 +875,7 @@ export const Compositor: React.FC = () => {
                         <span className={`flex-1 truncate text-[11px] font-medium ${isSelected ? 'text-violet-300' : layer.visible ? 'text-zinc-200' : 'text-zinc-600 line-through'}`}>
                           {layer.name}
                         </span>
-                        {layer.chromaKey.enabled && <span className="text-[8px] px-1.5 py-0.5 rounded-full font-bold text-black" style={{ backgroundColor: layer.chromaKey.color === 'green' ? '#00ff0c' : layer.chromaKey.color === 'blue' ? '#00d8ff' : '#ff5af1' }}>CK</span>}
+                        {layer.chromaKey.enabled && <span className="text-[8px] px-1.5 py-0.5 rounded-full font-bold text-black" style={{ backgroundColor: layer.chromaKey.color === 'green' ? '#00fa15' : layer.chromaKey.color === 'blue' ? '#0072ff' : '#ff4dfd' }}>CK</span>}
 
                         {/* Controls */}
                         <div className="flex items-center gap-0.5 shrink-0">
@@ -1026,7 +1026,7 @@ export const Compositor: React.FC = () => {
                       {(['green', 'blue', 'pink'] as const).map(c => (
                         <button key={c} onClick={() => updateLayer(selectedLayer.id, { chromaKey: { ...selectedLayer.chromaKey, color: c } })}
                           className={`w-8 h-8 rounded-lg border-2 transition-all ${selectedLayer.chromaKey.color === c ? 'border-white scale-110' : 'border-transparent opacity-50 hover:opacity-80'}`}
-                          style={{ backgroundColor: c === 'green' ? '#00ff0c' : c === 'blue' ? '#00d8ff' : '#ff5af1' }}
+                          style={{ backgroundColor: c === 'green' ? '#00fa15' : c === 'blue' ? '#0072ff' : '#ff4dfd' }}
                         />
                       ))}
                     </div>

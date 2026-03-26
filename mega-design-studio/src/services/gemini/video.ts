@@ -100,10 +100,12 @@ export const generateGreenScreenVideo = async (
     const ai = getAI();
     const { mimeType, data } = parseDataUrl(imageDataUrl);
 
-    let bgHex = "#00FF00";
-    if (backgroundColor === 'green') bgHex = "#00ff0c";
-    if (backgroundColor === 'blue') bgHex = "#00d8ff";
-    if (backgroundColor === 'pink') bgHex = "#ff5af1";
+    let bgHex = "#00fa15";
+    if (backgroundColor === 'green') bgHex = "#00fa15";
+    if (backgroundColor === 'blue') bgHex = "#0072ff";
+    if (backgroundColor === 'pink') bgHex = "#ff4dfd";
+    // Support custom hex colors passed directly
+    if (backgroundColor.startsWith('#')) bgHex = backgroundColor;
 
     const bgPrompt = `The character must appear on a SOLID ${backgroundColor.toUpperCase()} SCREEN background (Exact Hex: ${bgHex}) for chroma keying. No shadows, no gradients on the background.`;
 

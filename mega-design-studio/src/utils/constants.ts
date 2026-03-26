@@ -34,7 +34,7 @@ export const NAV_GROUPS = [
   {
     id: 'animatix',
     label: 'Animatix',
-    icon: 'fa-wand-magic-sparkles',
+    icon: 'fa-clapperboard',
     color: 'orange',
     children: [
       { id: 'concept', label: 'Concept', icon: 'fa-lightbulb' },
