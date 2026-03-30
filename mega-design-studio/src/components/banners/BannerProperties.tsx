@@ -79,20 +79,7 @@ export const BannerProperties: React.FC<BannerPropertiesProps> = ({ composition 
           <NumInput label="°" value={layer.rotation} onChange={v => update({ rotation: v })} min={-360} max={360} />
         </div>
 
-        {/* Opacity */}
-        <div>
-          <label className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1 block">Opacity</label>
-          <div className="flex items-center gap-2">
-            <input
-              type="range"
-              min={0} max={1} step={0.01}
-              value={layer.opacity}
-              onChange={e => update({ opacity: Number(e.target.value) })}
-              className="flex-1 accent-cyan-500"
-            />
-            <span className="text-zinc-400 w-8 text-right">{Math.round(layer.opacity * 100)}%</span>
-          </div>
-        </div>
+        {/* Opacity — controlled from layer panel inline slider, no duplicate here */}
 
         {/* Text properties */}
         {layer.type === 'text' && (

@@ -5,12 +5,15 @@ import { modifyImage, isolateSymbol, generateCharacterSheetFromReferences, gener
 import { Crop, ReferenceAsset } from '@/types';
 import { AspectRatioSelector } from '@/components/shared/AspectRatioSelector';
 import { VideoFullscreen } from '@/components/shared/VideoFullscreen';
+import { useToast } from '@/components/shared/Toast';
+import { ScreenColorPicker, resolveScreenColor } from '@/components/shared/ScreenColorPicker';
 
 type DragHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'move' | 'create';
 
 export const CharacterStudio: React.FC = () => {
   const { characterState, setCharacterState, setReferenceAssets, referenceAssets } = useExtractor();
   const { addAsset, assetLibrary } = useApp();
+  const { toast } = useToast();
   const imageWrapperRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const [triggerName, setTriggerName] = useState('');
@@ -144,7 +147,8 @@ Your task:
 Output: A clean, full-body character on pure white background.`;
       const result = await modifyImage(cropDataUrl, fullBodyPrompt, aspectRatio, []);
       updateState({ generatedImage: result || cropDataUrl, isolatedImage: null, characterSheet: null });
-    } catch (err) { console.error(err); alert('Character extraction failed'); }
+      toast('Character extracted', { type: 'success' });
+    } catch (err) { console.error(err); toast('Character extraction failed', { type: 'error' }); }
     finally { updateState({ isProcessingReskin: false }); }
   };
 
@@ -155,7 +159,8 @@ Output: A clean, full-body character on pure white background.`;
     try {
       const result = await modifyImage(generatedImage, prompt, aspectRatio, []);
       updateState({ generatedImage: result, isolatedImage: null, characterSheet: null });
-    } catch (err) { console.error(err); alert('Reskin failed'); }
+      toast('Character reskinned', { type: 'success' });
+    } catch (err) { console.error(err); toast('Reskin failed', { type: 'error' }); }
     finally { updateState({ isProcessingReskin: false }); }
   };
 
@@ -166,7 +171,8 @@ Output: A clean, full-body character on pure white background.`;
     try {
       const result = await generateCharacterSheetFromReferences(generatedImage, []);
       updateState({ characterSheet: result });
-    } catch (err) { console.error(err); alert('Sheet generation failed'); }
+      toast('Character sheet generated', { type: 'success' });
+    } catch (err) { console.error(err); toast('Sheet generation failed', { type: 'error' }); }
     finally { updateState({ isProcessingSheet: false }); }
   };
 
@@ -175,12 +181,12 @@ Output: A clean, full-body character on pure white background.`;
     if (!generatedImage) return;
     updateState({ isProcessingIsolation: true });
     try {
-      const colorMap: Record<string, string> = { green: '#00ff0c', blue: '#00d8ff', pink: '#ff5af1' };
-      const bgHex = colorMap[bgColor] || '#00ff0c';
-      const isolatePrompt = `Place this character on a solid ${bgHex} chroma key background. Keep the character exactly as-is, only change the background to a perfectly flat, uniform ${bgColor} screen color (${bgHex}). No shadows, no gradients, no floor - just the character on pure ${bgColor}.`;
+      const bgHex = resolveScreenColor(bgColor);
+      const isolatePrompt = `Place this character on a solid ${bgHex} chroma key background. Keep the character exactly as-is, only change the background to a perfectly flat, uniform screen color (${bgHex}). No shadows, no gradients, no floor - just the character on pure ${bgHex}.`;
       const result = await modifyImage(generatedImage, isolatePrompt, aspectRatio, []);
       updateState({ isolatedImage: result });
-    } catch (err) { console.error(err); alert('Chroma key failed'); }
+      toast('Chroma key applied', { type: 'success' });
+    } catch (err) { console.error(err); toast('Chroma key failed', { type: 'error' }); }
     finally { updateState({ isProcessingIsolation: false }); }
   };
 
@@ -205,7 +211,8 @@ Output: A clean, full-body character on pure white background.`;
       updateState({ generatedVideos: [...generatedVideos, ...newVideos] });
       // Auto-save videos to Lab
       newVideos.forEach((v, i) => addAsset({ id: v.id, url: v.url, type: 'character_primary', name: `Char Video: ${v.prompt?.slice(0, 20) || i + 1}`, mediaType: 'video' }));
-    } catch (err) { console.error(err); alert('Video generation failed'); }
+      toast(`Generated ${newVideos.length} video(s)`, { type: 'success' });
+    } catch (err) { console.error(err); toast('Video generation failed', { type: 'error' }); }
     finally { updateState({ isProcessingVideo: false }); }
   };
 
@@ -377,15 +384,7 @@ Output: A clean, full-body character on pure white background.`;
           <div className="flex items-center gap-6">
             <div className="flex flex-col gap-2">
               <label className="text-[10px] uppercase font-bold text-zinc-500">Screen Color</label>
-              <div className="flex gap-3">
-                {(['green', 'blue', 'pink'] as const).map(c => (
-                  <button key={c} onClick={() => updateState({ bgColor: c })}
-                    className={`w-14 h-14 rounded-xl border-2 transition-all flex items-center justify-center ${bgColor === c ? 'border-white scale-110 shadow-lg' : 'border-transparent opacity-50 hover:opacity-80'}`}
-                    style={{ backgroundColor: c === 'green' ? '#00ff0c' : c === 'blue' ? '#00d8ff' : '#ff5af1' }}>
-                    {bgColor === c && <i className="fas fa-check text-black text-lg" />}
-                  </button>
-                ))}
-              </div>
+              <ScreenColorPicker value={bgColor} onChange={hex => updateState({ bgColor: hex })} size="md" />
             </div>
             <button onClick={handleChromaKey} disabled={isProcessingIsolation}
               className="h-14 px-8 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white rounded-xl text-xs font-bold uppercase transition-colors disabled:opacity-50">

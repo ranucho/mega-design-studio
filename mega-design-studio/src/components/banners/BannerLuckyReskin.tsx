@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { useBanner } from '@/contexts/BannerContext';
 import { reskinBanner } from '@/services/gemini';
+import { useToast } from '@/components/shared/Toast';
 
 interface ReskinModalProps {
   onClose: () => void;
@@ -13,6 +14,7 @@ interface ReskinModalProps {
  */
 export const BannerLuckyReskin: React.FC<ReskinModalProps> = ({ onClose }) => {
   const { project, setProject, setStage } = useBanner();
+  const { toast } = useToast();
 
   const [theme, setTheme] = useState('');
   const [characterRef, setCharacterRef] = useState<string | null>(null);
@@ -55,9 +57,11 @@ export const BannerLuckyReskin: React.FC<ReskinModalProps> = ({ onClose }) => {
         };
       });
 
+      toast('Banner reskinned', { type: 'success' });
       onClose();
     } catch (err: any) {
       setError(err.message || 'Reskin failed');
+      toast('Banner reskin failed', { type: 'error' });
     } finally {
       setIsGenerating(false);
     }

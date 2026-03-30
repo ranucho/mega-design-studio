@@ -88,6 +88,7 @@ export const BannerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       stage: 'upload',
       isExtracting: false,
       isGenerating: false,
+      extractionProcessedCount: 0,
     });
     setActiveCompositionId(null);
   }, []);
@@ -151,18 +152,31 @@ export const BannerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const proj = projectRef.current;
     if (!proj || proj.selectedPresets.length === 0) return;
 
-    const presets = proj.selectedPresets
+    // Keep existing compositions that already have a preset key
+    const existingComps = proj.compositions || [];
+    const existingKeys = new Set(existingComps.map(c => c.presetKey).filter(Boolean));
+
+    // Only generate for presets that DON'T already have a composition
+    const presetsToGenerate = proj.selectedPresets
+      .filter(key => !existingKeys.has(key))
       .map(key => BANNER_PRESETS.find(p => p.key === key))
       .filter((p): p is NonNullable<typeof p> => !!p);
+
+    if (presetsToGenerate.length === 0) {
+      // All selected sizes already exist — just go to edit
+      setProject(prev => prev ? { ...prev, stage: 'edit' } : null);
+      setActiveCompositionId(existingComps[0]?.id ?? null);
+      return;
+    }
 
     const elements = proj.extractedElements;
 
     setProject(prev => prev ? { ...prev, isGenerating: true } : null);
 
-    const compositions: BannerComposition[] = [];
+    const newCompositions: BannerComposition[] = [];
 
     // Generate layouts one at a time (AI call per size)
-    for (const preset of presets) {
+    for (const preset of presetsToGenerate) {
       try {
         const layoutResult = await generateBannerLayout(
           elements,
@@ -176,8 +190,6 @@ export const BannerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           const el = elements.find(e => e.id === item.elementId);
           if (!el) return null;
 
-          // ALL elements are image layers — we use the extracted image assets,
-          // never replace them with live text rendering.
           return {
             id: crypto.randomUUID(),
             type: 'image' as const,
@@ -205,10 +217,9 @@ export const BannerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           };
         }).filter((l): l is BannerLayer => l !== null);
 
-        // Sort layers by z-order: background at bottom, CTA on top
         layers.sort((a, b) => getLayerZOrder(a.role, a.name) - getLayerZOrder(b.role, b.name));
 
-        compositions.push({
+        newCompositions.push({
           id: crypto.randomUUID(),
           name: preset.name,
           presetKey: preset.key,
@@ -221,24 +232,27 @@ export const BannerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           status: 'ready' as const,
         });
 
-        // Update progress after each completed size
+        // Update progress — merge existing + new so far
         setProject(prev => prev ? {
           ...prev,
-          compositions: [...compositions],
+          compositions: [...existingComps, ...newCompositions],
         } : null);
       } catch (err) {
         console.error(`Failed to generate layout for ${preset.name}:`, err);
       }
     }
 
+    // Final state: merge existing compositions with newly generated ones
+    const allCompositions = [...existingComps, ...newCompositions];
+
     setProject(prev => prev ? {
       ...prev,
-      compositions,
+      compositions: allCompositions,
       isGenerating: false,
       stage: 'edit',
     } : null);
 
-    setActiveCompositionId(compositions[0]?.id ?? null);
+    setActiveCompositionId(allCompositions[0]?.id ?? null);
   }, []);
 
   const updateComposition = useCallback((id: string, updates: Partial<BannerComposition>) => {

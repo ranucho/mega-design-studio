@@ -5,12 +5,14 @@ import { generateBackgroundImage, generateFromCrop, generateAnimation } from '@/
 import { ReferenceAsset, AspectRatio } from '@/types';
 import { AspectRatioSelector } from '@/components/shared/AspectRatioSelector';
 import { VideoFullscreen } from '@/components/shared/VideoFullscreen';
+import { useToast } from '@/components/shared/Toast';
 
 type DragHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'move' | 'create';
 
 export const BackgroundStudio: React.FC = () => {
   const { backgroundState, setBackgroundState, referenceAssets, setReferenceAssets } = useExtractor();
   const { addAsset, assetLibrary } = useApp();
+  const { toast } = useToast();
 
   const {
     sourceImage, generatedImage, prompt, aspectRatio, crop, isProcessing,
@@ -125,7 +127,8 @@ export const BackgroundStudio: React.FC = () => {
     try {
       const result = await generateBackgroundImage(prompt, aspectRatio);
       updateState({ generatedImage: result });
-    } catch (err) { console.error(err); alert('Background generation failed.'); }
+      toast('Background generated', { type: 'success' });
+    } catch (err) { console.error(err); toast('Background generation failed', { type: 'error' }); }
     finally { updateState({ isProcessing: false }); }
   };
 
@@ -140,7 +143,8 @@ export const BackgroundStudio: React.FC = () => {
         ? await generateFromCrop(cropped, extractPrompt, aspectRatio as any)
         : await generateBackgroundImage(extractPrompt, aspectRatio, sourceImage);
       updateState({ generatedImage: result });
-    } catch (err) { console.error(err); alert('Regeneration failed.'); }
+      toast('Background regenerated', { type: 'success' });
+    } catch (err) { console.error(err); toast('Regeneration failed', { type: 'error' }); }
     finally { updateState({ isProcessing: false }); }
   };
 
@@ -160,7 +164,8 @@ export const BackgroundStudio: React.FC = () => {
       updateState({ generatedVideos: [...generatedVideos, ...newVideos] });
       // Auto-save videos to Lab
       newVideos.forEach((v, i) => addAsset({ id: v.id, url: v.url, type: 'background', name: `BG Video ${generatedVideos.length + i + 1}`, mediaType: 'video' }));
-    } catch (err) { console.error(err); alert('Video generation failed'); }
+      toast(`Generated ${newVideos.length} background video(s)`, { type: 'success' });
+    } catch (err) { console.error(err); toast('Video generation failed', { type: 'error' }); }
     finally { updateState({ isProcessingVideo: false }); }
   };
 

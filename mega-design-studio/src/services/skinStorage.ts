@@ -5,6 +5,7 @@ import type {
 import {
   putSlotSkin, putBannerSkin, removeSlotSkin, removeBannerSkin,
   addToSlotIndex, addToBannerIndex, removeFromSlotIndex, removeFromBannerIndex,
+  updateSlotIndex, updateBannerIndex,
 } from './skinDb';
 import {
   isFirebaseConfigured, uploadSlotSkin as fbUploadSlot, uploadBannerSkin as fbUploadBanner,
@@ -52,6 +53,7 @@ export async function saveSlotSkin(
     masterImage: state.masterImage || '',
     reskinResult: state.reskinResult || '',
     reelsFrame: state.reelsFrame,
+    reelsFrameCropCoordinates: state.reelsFrameCropCoordinates || null,
     symbols: state.symbols.map(s => ({
       id: s.id,
       name: s.name,
@@ -129,6 +131,7 @@ export function loadSlotSkinIntoState(
     masterPrompt: skin.masterPrompt,
     activeMasterView: skin.reskinResult ? 'reskinned' : 'source',
     reelsFrame: skin.reelsFrame,
+    reelsFrameCropCoordinates: skin.reelsFrameCropCoordinates || null,
     symbols: skin.symbols.map(s => ({
       id: s.id,
       name: s.name,
@@ -156,6 +159,59 @@ export function loadSlotSkinIntoState(
     layoutGutterVertical: skin.layoutGutterVertical,
     symbolScale: skin.symbolScale,
   }));
+}
+
+// --- Slot Skin Update (overwrite existing skin with current state) ---
+
+export async function updateSlotSkin(
+  existingSkin: SlotSkin,
+  state: SymbolGeneratorState,
+): Promise<SlotSkin> {
+  const sourceImage = state.reskinResult || state.masterImage;
+  const thumbnailUrl = sourceImage ? await generateThumbnail(sourceImage) : existingSkin.thumbnailUrl;
+
+  const updated: SlotSkin = {
+    ...existingSkin,
+    thumbnailUrl,
+    masterPrompt: state.masterPrompt,
+    masterImage: state.masterImage || '',
+    reskinResult: state.reskinResult || '',
+    reelsFrame: state.reelsFrame,
+    reelsFrameCropCoordinates: state.reelsFrameCropCoordinates || null,
+    symbols: state.symbols.map(s => ({
+      id: s.id,
+      name: s.name,
+      isolatedUrl: s.isolatedUrl || '',
+      rawCropDataUrl: s.rawCropDataUrl || null,
+      cropCoordinates: s.cropCoordinates || null,
+      spanRows: s.spanRows,
+      withFrame: s.withFrame,
+      symbolRole: s.symbolRole,
+      scaleX: s.scaleX,
+      scaleY: s.scaleY,
+    })),
+    gridState: state.gridState,
+    gridRows: state.gridRows,
+    gridCols: state.gridCols,
+    layoutOffsetX: state.layoutOffsetX,
+    layoutOffsetY: state.layoutOffsetY,
+    layoutWidth: state.layoutWidth,
+    layoutHeight: state.layoutHeight,
+    layoutGutterHorizontal: state.layoutGutterHorizontal,
+    layoutGutterVertical: state.layoutGutterVertical,
+    symbolScale: state.symbolScale,
+    isUploaded: false,
+    isUploading: false,
+  };
+
+  await putSlotSkin(updated);
+  updateSlotIndex(updated.id, { thumbnailUrl: updated.thumbnailUrl });
+
+  if (isFirebaseConfigured()) {
+    backgroundUploadSlotSkin(updated).catch(console.error);
+  }
+
+  return updated;
 }
 
 // --- Slot Skin Delete ---
@@ -233,6 +289,40 @@ async function backgroundUploadBannerSkin(skin: BannerSkin): Promise<void> {
   }
 }
 
+// --- Banner Skin Update (overwrite existing skin with current project state) ---
+
+export async function updateBannerSkin(
+  existingSkin: BannerSkin,
+  project: BannerProject,
+): Promise<BannerSkin> {
+  const thumbnailUrl = await generateThumbnail(project.sourceImage);
+
+  const updated: BannerSkin = {
+    ...existingSkin,
+    thumbnailUrl,
+    sourceImage: project.sourceImage,
+    sourceWidth: project.sourceWidth,
+    sourceHeight: project.sourceHeight,
+    detectedElements: [...project.detectedElements],
+    extractedElements: project.extractedElements.map(e => ({ ...e })),
+    compositions: project.compositions.map(c => ({
+      ...c,
+      layers: c.layers.map(l => ({ ...l })),
+    })),
+    isUploaded: false,
+    isUploading: false,
+  };
+
+  await putBannerSkin(updated);
+  updateBannerIndex(updated.id, { thumbnailUrl: updated.thumbnailUrl });
+
+  if (isFirebaseConfigured()) {
+    backgroundUploadBannerSkin(updated).catch(console.error);
+  }
+
+  return updated;
+}
+
 // --- Banner Skin Load ---
 
 export function loadBannerSkinIntoProject(
@@ -268,17 +358,27 @@ export function loadBannerSkinIntoProject(
       status: 'edited' as const,
     }));
 
-    // Build project from skin data — works even if prev is null
+    // Build project from skin data — ensure ALL required BannerProject fields are present
     return {
-      ...(prev || {} as BannerProject),
+      id: prev?.id || crypto.randomUUID(),
       sourceImage: skin.sourceImage,
+      originalImage: prev?.originalImage || undefined,
       sourceWidth: skin.sourceWidth,
       sourceHeight: skin.sourceHeight,
       detectedElements: skin.detectedElements,
       extractedElements: skin.extractedElements,
       compositions: updatedComps,
-      isExtracting: false,
+      selectedPresets: [
+        ...new Set([
+          ...(prev?.selectedPresets || []),
+          ...updatedComps.map(c => c.presetKey).filter(Boolean),
+        ]),
+      ],
+      mode: prev?.mode || 'resize',
       stage: (prev?.stage || 'extract') as any,
+      isExtracting: false,
+      isGenerating: prev?.isGenerating || false,
+      extractionProcessedCount: 0,
     };
   });
 }

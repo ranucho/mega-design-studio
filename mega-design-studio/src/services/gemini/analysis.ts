@@ -261,13 +261,13 @@ For each unique symbol, return:
   • "high" — High-paying themed/illustrated symbols: characters, objects, animals, gems, artifacts, any pictorial game symbol that is NOT a simple card rank
   • "wild" — Wild symbol (usually says "WILD" on it)
   • "scatter" — Scatter or Bonus symbol (usually says "SCATTER" or "BONUS")
-- bbox: The bounding box of ONE clear instance of this symbol as percentages of the full image (x, y = top-left corner; w, h = dimensions). Values must be 0-100. The box should tightly fit the symbol with minimal padding.
+- bbox: The bounding box of ONE clear instance of this symbol as percentages of the full image (x, y = top-left corner; w, h = dimensions). Values must be 0-100. IMPORTANT: The bounding box must include the FULL GRID CELL — if the symbol has a decorative frame/border around it, the bbox MUST include the complete frame with all 4 corners. Do NOT crop tight to the inner symbol — include the full cell boundary including any frame, border, glow, or ornamental edges.
 - isLongTile: true if the symbol spans multiple rows vertically (tall/elongated tile), false for normal single-cell symbols.
 
 RULES:
 - Return each UNIQUE symbol only ONCE — pick the clearest/most visible instance for its bbox.
 - Do NOT return duplicate entries for the same symbol appearing in multiple grid positions.
-- Be PRECISE with bounding boxes — they should tightly frame each symbol, not the entire cell.
+- BOUNDING BOX MUST INCLUDE THE FULL CELL: Include the decorative frame/border if present. It is much better to include a bit too much than to cut through a frame. The bbox should capture the entire grid cell, not just the inner artwork.
 - Include ALL visible symbols, even partially visible ones at edges if identifiable.
 - IMPORTANT: Correctly classify role. Card symbols (9,10,J,Q,K,A) = "low". Illustrated/themed symbols = "high". Only use "wild"/"scatter" for those specific special symbols.
 - Order them: low symbols first (9, 10, J, Q, K, A), then high/themed symbols, then special (Wild, Scatter, Bonus) last.` }

@@ -3,8 +3,8 @@ import type { SlotSkin, BannerSkin } from '@/types/shared';
 import { useExtractor } from '@/contexts/ExtractorContext';
 import { useBanner } from '@/contexts/BannerContext';
 import {
-  saveSlotSkin, loadSlotSkinIntoState, deleteSlotSkin,
-  saveBannerSkin, loadBannerSkinIntoProject, deleteBannerSkin,
+  saveSlotSkin, updateSlotSkin, loadSlotSkinIntoState, deleteSlotSkin,
+  saveBannerSkin, updateBannerSkin, loadBannerSkinIntoProject, deleteBannerSkin,
 } from '@/services/skinStorage';
 
 interface SkinSelectorProps {
@@ -31,6 +31,17 @@ const SlotSkinSelector: React.FC = () => {
       onLoad={(skin) => {
         loadSlotSkinIntoState(skin as SlotSkin, setSymbolGenState);
         setActiveSlotSkinId(skin.id);
+      }}
+      onUpdate={async () => {
+        const active = slotSkins.find(s => s.id === activeSlotSkinId);
+        if (!active) return;
+        const updated = await updateSlotSkin(active as SlotSkin, symbolGenState);
+        setSlotSkins(prev => prev.map(s => s.id === updated.id ? updated : s));
+        setSlotSkinIndex(prev => prev.map(s => s.id === updated.id ? { ...s, thumbnailUrl: updated.thumbnailUrl } : s));
+      }}
+      onRename={(id, newName) => {
+        setSlotSkins(prev => prev.map(s => s.id === id ? { ...s, name: newName } : s));
+        setSlotSkinIndex(prev => prev.map(s => s.id === id ? { ...s, name: newName } : s));
       }}
       onDelete={async (id) => {
         await deleteSlotSkin(id);
@@ -66,6 +77,17 @@ const BannerSkinSelector: React.FC = () => {
         loadBannerSkinIntoProject(skin as BannerSkin, setProject);
         setActiveBannerSkinId(skin.id);
       }}
+      onUpdate={async () => {
+        const active = bannerSkins.find(s => s.id === activeBannerSkinId);
+        if (!active || !project) return;
+        const updated = await updateBannerSkin(active as BannerSkin, project);
+        setBannerSkins(prev => prev.map(s => s.id === updated.id ? updated : s));
+        setBannerSkinIndex(prev => prev.map(s => s.id === updated.id ? { ...s, thumbnailUrl: updated.thumbnailUrl } : s));
+      }}
+      onRename={(id, newName) => {
+        setBannerSkins(prev => prev.map(s => s.id === id ? { ...s, name: newName } : s));
+        setBannerSkinIndex(prev => prev.map(s => s.id === id ? { ...s, name: newName } : s));
+      }}
       onDelete={async (id) => {
         await deleteBannerSkin(id);
         setBannerSkins(prev => prev.filter(s => s.id !== id));
@@ -88,22 +110,32 @@ interface SkinSelectorUIProps {
   activeSkinId: string | null;
   canSave: boolean;
   onSave: (name: string) => Promise<void>;
+  onUpdate: () => Promise<void>;
   onLoad: (skin: SlotSkin | BannerSkin) => void;
+  onRename: (id: string, newName: string) => void;
   onDelete: (id: string) => Promise<void>;
   label: string;
 }
 
 const SkinSelectorUI: React.FC<SkinSelectorUIProps> = ({
-  skins, activeSkinId, canSave, onSave, onLoad, onDelete, label,
+  skins, activeSkinId, canSave, onSave, onUpdate, onLoad, onRename, onDelete, label,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isNaming, setIsNaming] = useState(false);
   const [skinName, setSkinName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [justUpdated, setJustUpdated] = useState(false);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   const activeSkin = skins.find(s => s.id === activeSkinId);
+
+  // Reset justUpdated when skin changes
+  useEffect(() => { setJustUpdated(false); }, [activeSkinId]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -111,6 +143,7 @@ const SkinSelectorUI: React.FC<SkinSelectorUIProps> = ({
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setIsOpen(false);
         setIsNaming(false);
+        setRenamingId(null);
       }
     };
     if (isOpen) document.addEventListener('mousedown', handleClick);
@@ -120,6 +153,10 @@ const SkinSelectorUI: React.FC<SkinSelectorUIProps> = ({
   useEffect(() => {
     if (isNaming && inputRef.current) inputRef.current.focus();
   }, [isNaming]);
+
+  useEffect(() => {
+    if (renamingId && renameInputRef.current) renameInputRef.current.focus();
+  }, [renamingId]);
 
   const handleSave = async () => {
     if (!skinName.trim() || isSaving) return;
@@ -138,6 +175,7 @@ const SkinSelectorUI: React.FC<SkinSelectorUIProps> = ({
   const handleLoad = (skin: SlotSkin | BannerSkin) => {
     onLoad(skin);
     setIsOpen(false);
+    setJustUpdated(false);
   };
 
   const handleDelete = async (e: React.MouseEvent, skinId: string) => {
@@ -147,6 +185,13 @@ const SkinSelectorUI: React.FC<SkinSelectorUIProps> = ({
     } catch (err) {
       console.error('Failed to delete skin:', err);
     }
+  };
+
+  const handleRenameSubmit = (skinId: string) => {
+    if (renameValue.trim() && renameValue.trim() !== skins.find(s => s.id === skinId)?.name) {
+      onRename(skinId, renameValue.trim());
+    }
+    setRenamingId(null);
   };
 
   if (skins.length === 0 && !canSave) return null;
@@ -166,11 +211,14 @@ const SkinSelectorUI: React.FC<SkinSelectorUIProps> = ({
           <span className="text-zinc-300 truncate max-w-[120px]">
             {activeSkin?.name || 'Skins'}
           </span>
-          <span className={`text-xs font-semibold ${skins.length > 0 ? 'text-amber-400' : 'text-zinc-500'}`}>({skins.length})</span>
+          {/* Only show count when no skin is selected */}
+          {!activeSkin && (
+            <span className={`text-xs font-semibold ${skins.length > 0 ? 'text-indigo-400' : 'text-zinc-500'}`}>({skins.length})</span>
+          )}
           <i className={`fa-solid fa-chevron-down text-xs text-zinc-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </button>
 
-        {/* Save button */}
+        {/* Save / Update buttons */}
         {canSave && (
           <>
             <div className="w-px h-4 bg-zinc-700" />
@@ -203,14 +251,33 @@ const SkinSelectorUI: React.FC<SkinSelectorUIProps> = ({
                 </button>
               </div>
             ) : (
-              <button
-                onClick={() => setIsNaming(true)}
-                className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors whitespace-nowrap"
-                title="Save current state as a new skin"
-              >
-                <i className="fa-solid fa-plus" />
-                <span>Save Skin</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {activeSkin && (
+                  <button
+                    onClick={async () => {
+                      setIsUpdating(true);
+                      try { await onUpdate(); setJustUpdated(true); } catch (err) { console.error('Failed to update skin:', err); }
+                      finally { setIsUpdating(false); }
+                    }}
+                    disabled={isUpdating || justUpdated}
+                    className={`flex items-center gap-1 text-xs transition-colors whitespace-nowrap disabled:opacity-50 ${
+                      justUpdated ? 'text-zinc-500' : 'text-indigo-400 hover:text-indigo-300'
+                    }`}
+                    title={justUpdated ? 'Skin is up to date' : `Update "${activeSkin.name}" with current state`}
+                  >
+                    {isUpdating ? <i className="fa-solid fa-spinner fa-spin" /> : justUpdated ? <i className="fa-solid fa-check" /> : <i className="fa-solid fa-arrow-up-from-bracket" />}
+                    <span>{justUpdated ? 'Saved' : 'Update'}</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setIsNaming(true)}
+                  className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors whitespace-nowrap"
+                  title="Save current state as a new skin"
+                >
+                  <i className="fa-solid fa-plus" />
+                  <span>Save New</span>
+                </button>
+              </div>
             )}
           </>
         )}
@@ -218,32 +285,48 @@ const SkinSelectorUI: React.FC<SkinSelectorUIProps> = ({
 
       {/* Dropdown panel */}
       {isOpen && skins.length > 0 && (
-        <div className="absolute top-full left-0 mt-1 z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl overflow-hidden min-w-[260px] max-w-[360px]">
+        <div className="absolute top-full right-0 mt-1 z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl overflow-hidden min-w-[280px] max-w-[380px]">
           <div className="p-2 border-b border-zinc-800">
             <span className="text-xs text-zinc-500 font-medium uppercase tracking-wide">
               {label}
             </span>
           </div>
-          <div className="max-h-[300px] overflow-y-auto">
+          <div className="max-h-[340px] overflow-y-auto">
             {skins.map(skin => (
               <div
                 key={skin.id}
-                onClick={() => handleLoad(skin)}
-                className={`flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors group ${
+                onClick={() => renamingId !== skin.id && handleLoad(skin)}
+                className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors group ${
                   skin.id === activeSkinId
                     ? 'bg-indigo-500/10 border-l-2 border-indigo-500'
                     : 'hover:bg-zinc-800/50 border-l-2 border-transparent'
                 }`}
               >
                 {skin.thumbnailUrl ? (
-                  <img src={skin.thumbnailUrl} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0 border border-zinc-700" />
+                  <img src={skin.thumbnailUrl} alt="" className="w-14 h-14 rounded-lg object-cover flex-shrink-0 border border-zinc-700" />
                 ) : (
-                  <div className="w-10 h-10 rounded bg-zinc-800 flex items-center justify-center flex-shrink-0">
+                  <div className="w-14 h-14 rounded-lg bg-zinc-800 flex items-center justify-center flex-shrink-0">
                     <i className="fa-solid fa-image text-zinc-600" />
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm text-white truncate">{skin.name}</div>
+                  {renamingId === skin.id ? (
+                    <input
+                      ref={renameInputRef}
+                      type="text"
+                      value={renameValue}
+                      onChange={e => setRenameValue(e.target.value)}
+                      onBlur={() => handleRenameSubmit(skin.id)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') handleRenameSubmit(skin.id);
+                        if (e.key === 'Escape') setRenamingId(null);
+                      }}
+                      onClick={e => e.stopPropagation()}
+                      className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-0.5 text-sm text-white outline-none focus:border-indigo-500"
+                    />
+                  ) : (
+                    <div className="text-sm text-white truncate">{skin.name}</div>
+                  )}
                   <div className="text-xs text-zinc-500">
                     {new Date(skin.createdAt).toLocaleDateString()}
                     {skin.isUploaded && <i className="fa-solid fa-cloud text-emerald-500 ml-1.5" title="Synced to cloud" />}
@@ -252,6 +335,15 @@ const SkinSelectorUI: React.FC<SkinSelectorUIProps> = ({
                 {skin.id === activeSkinId && (
                   <i className="fa-solid fa-check text-indigo-400 text-xs" />
                 )}
+                {/* Rename button */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); setRenamingId(skin.id); setRenameValue(skin.name); }}
+                  className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-zinc-300 transition-all p-1"
+                  title="Rename"
+                >
+                  <i className="fa-solid fa-pen text-xs" />
+                </button>
+                {/* Delete button */}
                 <button
                   onClick={(e) => handleDelete(e, skin.id)}
                   className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400 transition-all p-1"

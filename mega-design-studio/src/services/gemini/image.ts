@@ -601,7 +601,17 @@ export const isolateSymbol = async (image: string): Promise<string | null> => {
             contents: {
                 parts: [
                     { inlineData: { mimeType, data } },
-                    { text: "IMAGE PROCESSING TASK: Background Removal / Object Isolation.\n\nINPUT: A crop containing a game symbol.\nGOAL: Output the EXACT SAME symbol on a SOLID WHITE background RGB(255,255,255).\n\nCRITICAL CONSTRAINTS:\n1. BACKGROUND COLOR: Must be pure white #FFFFFF.\n2. PRESERVE IDENTITY: Do not generate a new symbol. Maintain the original art style exactly.\n3. CONSISTENCY: Output a 1:1 square. Center the symbol perfectly. Scale the symbol to occupy about 80% of the canvas width/height to ensure uniform sizing across all symbols. Do not cut off edges." }
+                    { text: `IMAGE PROCESSING TASK: Background Removal / Object Isolation.
+
+INPUT: A crop containing a game symbol (letter, number, character, object, coin, jewel, etc.).
+GOAL: Output the EXACT SAME symbol on a SOLID WHITE background RGB(255,255,255).
+
+CRITICAL CONSTRAINTS:
+1. BACKGROUND COLOR: Must be pure white #FFFFFF.
+2. PRESERVE IDENTITY: Do not generate a new symbol. Maintain the original art style exactly.
+3. CONSISTENCY: Output a 1:1 square. Center the symbol perfectly. Scale the symbol to occupy about 80% of the canvas width/height to ensure uniform sizing across all symbols.
+4. COMPLETENESS — NEVER CUT OR CROP THE SYMBOL: The ENTIRE symbol must be fully visible. No edges, corners, curves, or parts may be cut off or cropped. If the symbol is circular (coin, medallion, orb), the full circle must be complete. If it has wings, flames, tails, or protruding elements, they must ALL be fully visible within the canvas.
+5. SHAPE PRESERVATION: If the symbol is round/circular, it must remain a perfect complete circle — not clipped into a square. If it has a unique shape (star, diamond, hexagon), preserve the full shape outline.` }
                 ]
             },
             config: {
@@ -773,11 +783,13 @@ const autoTrimAndFill = (dataUrl: string, w: number, h: number): Promise<string>
             const cCtx = cropped.getContext('2d')!;
             cCtx.drawImage(img, minX, minY, bw, bh, 0, 0, bw, bh);
 
-            // Re-expand to target dimensions using cover mode
+            // Re-expand to target dimensions using contain mode (never crop)
             const out = document.createElement('canvas');
             out.width = w; out.height = h;
             const oCtx = out.getContext('2d')!;
-            const scale = Math.max(w / bw, h / bh);
+            oCtx.fillStyle = '#FFFFFF';
+            oCtx.fillRect(0, 0, w, h);
+            const scale = Math.min(w / bw, h / bh);
             const dw = Math.round(bw * scale);
             const dh = Math.round(bh * scale);
             oCtx.drawImage(cropped, Math.round((w - dw) / 2), Math.round((h - dh) / 2), dw, dh);
@@ -802,16 +814,17 @@ export const isolateSymbolWithFrame = async (image: string): Promise<string | nu
 
 INPUT: A rough crop from a slot machine screenshot. The crop contains a game symbol inside a DECORATIVE FRAME (border, ornamental edges, glow, metallic rim, etc.).
 
-GOAL: Output a CLEAN version of this EXACT framed symbol on a solid WHITE (#FFFFFF) background.
+GOAL: Output a CLEAN version of this EXACT framed symbol, filling the ENTIRE canvas edge-to-edge with the frame.
 
 CRITICAL RULES — follow every single one:
-1. PRESERVE THE ORIGINAL FRAME EXACTLY: The frame/border visible in the input is the REAL frame from the game. Keep its exact style, thickness, colors, ornaments, and proportions. Do NOT redesign, simplify, redraw, or invent a new frame.
-2. NOTHING OUTSIDE THE FRAME: Everything outside the outer edge of the frame must be pure white #FFFFFF. Remove all neighboring cell artifacts, reel strips, UI elements.
-3. NOTHING POPS OUT: The symbol artwork must be FULLY CONTAINED inside the frame. No part of the symbol (wings, flames, ribbons, glow effects) should extend beyond the rectangular frame boundary. If anything extends past the frame edge, clip it at the frame border.
-4. FILL EDGE TO EDGE: The frame rectangle must fill the entire output canvas with ZERO margins, ZERO empty pixels, ZERO padding around it. The outer edges of the frame must touch all 4 sides of the output image. Scale up so the frame fills everything.
-5. PRESERVE IDENTITY: Keep the exact same symbol art, colors, and design. Do not redesign or reimagine.
-6. RECTANGULAR FRAME SHAPE: The output frame must be a clean rectangle. Straighten edges if the crop was skewed.
-7. OUTPUT: 1:1 square. Frame outer edges touching all 4 canvas edges.` }
+1. FRAME FILLS THE CANVAS COMPLETELY: The frame's outer edges must touch ALL 4 sides of the output image. ZERO white space, ZERO margins, ZERO padding around the frame. Scale up so the frame fills everything edge to edge.
+2. PRESERVE THE FRAME EXACTLY: Keep its exact style, thickness, colors, ornaments, and proportions. Do NOT redesign, simplify, thin out, redraw, or invent a new frame. The frame must look EXACTLY like the input — same thickness on all sides.
+3. FRAME MUST BE COMPLETE: All 4 sides, all 4 corners must be fully visible. Nothing cropped or cut off.
+4. SYMBOL INSIDE FRAME: The symbol artwork must be FULLY CONTAINED inside the frame. Nothing extends beyond the frame border.
+5. NOTHING OUTSIDE THE FRAME: Remove all neighboring cell artifacts, reel strips, grid lines. The frame's outer edge IS the image edge.
+6. PRESERVE IDENTITY: Keep the exact same symbol art, colors, and design. Do not redesign.
+7. RECTANGULAR OUTPUT: The frame must be a clean rectangle filling the full canvas. Straighten if skewed.
+8. OUTPUT: 1:1 square.` }
                 ]
             },
             config: {
@@ -822,10 +835,8 @@ CRITICAL RULES — follow every single one:
         for (const part of response.candidates?.[0]?.content?.parts || []) {
              if (part.inlineData) {
                  const raw = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-                 // Use cover mode to fill 180×170 completely — no dead pixels
-                 const covered = await resizeToExact(raw, SYMBOL_WIDTH, SYMBOL_HEIGHT, '#FFFFFF', 'cover');
-                 // Post-process: auto-trim any remaining white border, then re-fill canvas
-                 return autoTrimAndFill(covered, SYMBOL_WIDTH, SYMBOL_HEIGHT);
+                 // Frame should fill edge-to-edge — use cover to fill 180x170 completely
+                 return resizeToExact(raw, SYMBOL_WIDTH, SYMBOL_HEIGHT, '#000000', 'cover');
              }
         }
         return null;
@@ -1020,9 +1031,21 @@ export const generateBackgroundImage = async (
         parts.push({ inlineData: { mimeType, data } });
     }
 
-    parts.push({
-        text: `Generate a high-quality game background image. ${prompt}. The image should be suitable for use as a slot game or video game background. No UI elements, no text, no characters.`
-    });
+    if (referenceImage) {
+        // When reskinning from a reference (e.g. full slot screen), preserve the full composition
+        parts.push({
+            text: `${prompt}
+
+IMPORTANT COMPOSITION RULES:
+- If the reference image contains a character or mascot figure (e.g. in the header/banner area above the reels), you MUST include a NEW character that fits the new theme in the SAME position, at the SAME scale and pose. Do NOT replace characters with landscapes or scenery — replace them with a re-themed CHARACTER.
+- BRAND LOGO PROTECTION: If there is a logo in the top corner of the image (e.g. a company or brand logo like "Club Vegas"), it MUST be kept EXACTLY as-is — same design, same text, same colors, same position. Do NOT rename, retheme, or replace brand logos. They are sacred and untouchable.
+- Maintain the exact same composition, layout, and element placement as the reference image.`
+        });
+    } else {
+        parts.push({
+            text: `Generate a high-quality game background image. ${prompt}. The image should be suitable for use as a slot game or video game background. No UI elements, no text, no characters.`
+        });
+    }
 
     try {
         const response = await ai.models.generateContent({

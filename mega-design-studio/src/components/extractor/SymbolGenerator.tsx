@@ -21,6 +21,7 @@ import { SymbolItem, MergedFrame, ReferenceAsset } from '@/types';
 import { VideoFullscreen } from '@/components/shared/VideoFullscreen';
 import { parallelBatch } from '@/services/parallelBatch';
 import { AspectRatioSelector } from '@/components/shared/AspectRatioSelector';
+import { useToast } from '@/components/shared/Toast';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -72,6 +73,7 @@ const DEFAULT_SYMBOL_NAMES = [
 export const SymbolGenerator: React.FC = () => {
   const { symbolGenState, setSymbolGenState, setReferenceAssets, referenceAssets } = useExtractor();
   const { assetLibrary, addAsset } = useApp();
+  const { toast } = useToast();
 
   // Merged lab assets for asset picker (Feature 1)
   const labAssets = useMemo(() => {
@@ -245,8 +247,10 @@ CRITICAL RULES:
   - High-value/thematic symbols should be redesigned as ${masterPrompt}-themed versions but keep similar shape and position.
 - Current symbols on the grid: ${symbolNames}.
 - Replace A with a ${masterPrompt}-themed A, Q with a ${masterPrompt}-themed Q, and so on for every symbol.
-- Replace EVERY visual from the source image with the new theme — no original artwork should remain.
+- Replace EVERY visual from the source image with the new theme — no original artwork should remain, EXCEPT brand logos (see below).
 - Keep the same perspective, camera angle, and overall composition.
+- CHARACTER PRESERVATION: If the original image has a character/mascot figure (e.g. in the header area above the reels), the reskin MUST include a NEW character that fits the "${masterPrompt}" theme in the SAME position, at the SAME scale and pose. Do NOT replace characters with landscapes or empty scenery — always replace a character WITH a character.
+- BRAND LOGO PROTECTION: If there is a logo in the top corner of the image (e.g. "Club Vegas", a company/brand logo), it is a BRAND LOGO and must be kept EXACTLY as-is — same design, same text, same colors, same position. Do NOT rename it, retheme it, or replace it. Brand logos are sacred and untouchable.
 
 COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
 - Use a RICH, DIVERSE colour palette — at minimum 5-6 distinct hues across all symbols.
@@ -270,6 +274,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
           type: 'style',
           name: `Reskin: ${masterPrompt}`,
         });
+        toast('Master reel reskinned', { type: 'success' });
         // Auto re-extract symbols + background after reskin
         autoReExtractSymbols(result);
         autoReExtractBackground(result);
@@ -278,7 +283,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
       }
     } catch (e) {
       console.error(e);
-      alert('Master generation failed.');
+      toast('Master generation failed', { type: 'error' });
       updateState({ isProcessingMaster: false });
     }
   };
@@ -559,15 +564,24 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
         const det = detected[i];
         const sym = newSymbols[i];
         const canvas = document.createElement('canvas');
-        const px = Math.round((det.bbox.x / 100) * img.width);
-        const py = Math.round((det.bbox.y / 100) * img.height);
-        const pw = Math.round((det.bbox.w / 100) * img.width);
-        const ph = Math.round((det.bbox.h / 100) * img.height);
+        // Add padding for framed symbols so the frame isn't cut
+        const hasFrame = det.role !== 'low';
+        const padPct = hasFrame ? 2 : 0; // 2% padding for framed symbols
+        const bx = Math.max(0, det.bbox.x - padPct);
+        const by = Math.max(0, det.bbox.y - padPct);
+        const bw = Math.min(100 - bx, det.bbox.w + padPct * 2);
+        const bh = Math.min(100 - by, det.bbox.h + padPct * 2);
+        const px = Math.round((bx / 100) * img.width);
+        const py = Math.round((by / 100) * img.height);
+        const pw = Math.round((bw / 100) * img.width);
+        const ph = Math.round((bh / 100) * img.height);
         if (pw <= 0 || ph <= 0) continue;
         canvas.width = pw;
         canvas.height = ph;
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, px, py, pw, ph, 0, 0, pw, ph);
+        // Store the padded coordinates for re-extraction
+        sym.cropCoordinates = { x: bx, y: by, w: bw, h: bh };
         cropData.push({ det, sym, cropDataUrl: canvas.toDataURL('image/png') });
       }
 
@@ -604,9 +618,10 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
         4, // batch size — 4 parallel AI calls
         300, // delay between batches
       );
+      toast('Symbols extracted', { type: 'success' });
     } catch (err) {
       console.error('Auto extract failed:', err);
-      alert('Auto extract failed. Try again.');
+      toast('Auto extract failed', { type: 'error' });
     } finally {
       setIsAutoExtracting(false);
     }
@@ -697,8 +712,10 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
         4,
         300,
       );
+      toast('Symbols reprocessed', { type: 'success' });
     } catch (err) {
       console.error('Bulk reprocess failed:', err);
+      toast('Bulk reprocess failed', { type: 'error' });
     } finally {
       // Clear any remaining processing flags
       setSymbolGenState(prev => ({
@@ -796,9 +813,6 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
   // Auto re-extract background (reels frame) after reskin using stored crop coords.
   // Uses the original clean frame as a reference so the AI knows exactly what "clean" looks like.
   const autoReExtractBackground = async (reskinImageUrl: string) => {
-    const frameCropCoords = reelsFrameCropCoordinates;
-    if (!frameCropCoords || frameCropCoords.w <= 0) return;
-
     // We need the existing clean reelsFrame as reference
     const cleanRef = reelsFrame;
 
@@ -810,18 +824,28 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
     if (!img.width || !img.height) { setIsCleaningFrame(false); return; }
 
     try {
-      // Crop the reskinned image using stored coordinates
-      const canvas = document.createElement('canvas');
-      const px = Math.round((frameCropCoords.x / 100) * img.width);
-      const py = Math.round((frameCropCoords.y / 100) * img.height);
-      const pw = Math.round((frameCropCoords.w / 100) * img.width);
-      const ph = Math.round((frameCropCoords.h / 100) * img.height);
-      if (pw <= 0 || ph <= 0) { setIsCleaningFrame(false); return; }
-      canvas.width = pw;
-      canvas.height = ph;
-      const ctx = canvas.getContext('2d');
-      ctx?.drawImage(img, px, py, pw, ph, 0, 0, pw, ph);
-      const dirtyCrop = canvas.toDataURL('image/png');
+      let dirtyCrop: string;
+      const frameCropCoords = reelsFrameCropCoordinates;
+
+      if (frameCropCoords && frameCropCoords.w > 0) {
+        // Crop the reskinned image using stored coordinates
+        const canvas = document.createElement('canvas');
+        const px = Math.round((frameCropCoords.x / 100) * img.width);
+        const py = Math.round((frameCropCoords.y / 100) * img.height);
+        const pw = Math.round((frameCropCoords.w / 100) * img.width);
+        const ph = Math.round((frameCropCoords.h / 100) * img.height);
+        if (pw <= 0 || ph <= 0) { setIsCleaningFrame(false); return; }
+        canvas.width = pw;
+        canvas.height = ph;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, px, py, pw, ph, 0, 0, pw, ph);
+        dirtyCrop = canvas.toDataURL('image/png');
+      } else {
+        // No crop coordinates — can't auto-extract background without knowing where the reels are
+        console.log('[autoReExtractBackground] No crop coordinates, skipping. User needs to manually crop the frame.');
+        setIsCleaningFrame(false);
+        return;
+      }
 
       let result: string;
       if (cleanRef) {
@@ -847,6 +871,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
         type: 'background',
         name: 'Reels Frame (Reskinned)',
       });
+      toast('Reels frame extracted', { type: 'success' });
     } catch (err) {
       console.error('Auto re-extract background failed', err);
     } finally {
@@ -1011,8 +1036,10 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
           name: 'Reels Frame (AI Cleaned)',
         });
       }
+      toast('Frame cleaned', { type: 'success' });
     } catch (err) {
       console.error('AI frame clean failed', err);
+      toast('Frame clean failed', { type: 'error' });
     } finally {
       setIsCleaningFrame(false);
     }
@@ -1930,13 +1957,13 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                   draggable={!!sym.isolatedUrl}
                   onDragStart={(e) => handleDragStartLibrary(e, sym.id)}
                 >
-                  {/* Image area — canonical 180:170 for regular, 180:510 for tall */}
+                  {/* Image area — uniform card height, contain-fit */}
                   <div
-                    className="bg-zinc-800 relative flex items-center justify-center border-b border-zinc-700 cursor-grab active:cursor-grabbing w-full"
-                    style={{ aspectRatio: isLongTile ? '180 / 510' : '180 / 170' }}
+                    className="bg-zinc-800 relative flex items-center justify-center border-b border-zinc-700 cursor-grab active:cursor-grabbing w-full overflow-hidden p-2"
+                    style={{ height: isLongTile ? 300 : 170 }}
                   >
                     {sym.isolatedUrl ? (
-                      <img src={sym.isolatedUrl} className="w-full h-full object-contain p-2 pointer-events-none" />
+                      <img src={sym.isolatedUrl} className="max-w-full max-h-full object-contain pointer-events-none" />
                     ) : (
                       <div className="flex flex-col items-center gap-1">
                         <span className="text-zinc-500 text-xs font-bold">{sym.name}</span>
@@ -2129,11 +2156,10 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                 className="bg-zinc-900 border border-blue-800/50 rounded-xl overflow-hidden flex flex-col group col-span-2"
               >
                 <div
-                  className="bg-zinc-800 relative flex items-center justify-center border-b border-blue-700/30 w-full"
-                  style={{ aspectRatio: '360 / 170' }}
+                  className="bg-zinc-800 relative flex items-center justify-center border-b border-blue-700/30 w-full overflow-hidden p-2"
                 >
                   {reelsFrame ? (
-                    <img src={reelsFrame} className="w-full h-full object-contain p-2" />
+                    <img src={reelsFrame} className="max-w-full h-auto object-contain" style={{ imageRendering: 'auto' }} />
                   ) : (
                     <div className="flex flex-col items-center gap-1">
                       <i className="fas fa-border-all text-blue-500 text-lg" />

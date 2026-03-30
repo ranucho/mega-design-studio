@@ -60,7 +60,7 @@ export const BannerCanvas: React.FC<BannerCanvasProps> = ({ composition }) => {
 
   // viewScale: fit composition into the canvas container
   const containerRef = useRef<HTMLDivElement>(null);
-  const [viewScale, setViewScale] = useState(1);
+  const [viewScale, setViewScale] = useState(0); // Start at 0 to avoid flash at wrong scale
 
   useEffect(() => {
     const el = containerRef.current;
@@ -76,13 +76,16 @@ export const BannerCanvas: React.FC<BannerCanvasProps> = ({ composition }) => {
     return () => ro.disconnect();
   }, [composition.width, composition.height]);
 
-  // Preload images
+  // Preload images (re-load when src changes, e.g. after skin switch)
   useEffect(() => {
     for (const layer of layers) {
-      if (layer.type === 'image' && layer.src && !imageCache.current.has(layer.id)) {
-        const img = new Image();
-        img.src = layer.src;
-        imageCache.current.set(layer.id, img);
+      if (layer.type === 'image' && layer.src) {
+        const cached = imageCache.current.get(layer.id);
+        if (!cached || cached.src !== layer.src) {
+          const img = new Image();
+          img.src = layer.src;
+          imageCache.current.set(layer.id, img);
+        }
       }
     }
   }, [layers]);
@@ -392,7 +395,7 @@ export const BannerCanvas: React.FC<BannerCanvasProps> = ({ composition }) => {
 
       {/* Canvas area — relative container so DOM selection overlay can extend outside */}
       <div ref={containerRef} className="flex-1 flex items-center justify-center overflow-visible bg-zinc-950 p-6 relative">
-        <div className="relative" style={{ width: composition.width * viewScale, height: composition.height * viewScale }}>
+        <div className="relative" style={{ width: composition.width * viewScale, height: composition.height * viewScale, opacity: viewScale > 0 ? 1 : 0 }}>
           {/* The actual canvas */}
           <canvas
             ref={canvasRef}

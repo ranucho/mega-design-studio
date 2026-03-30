@@ -3,6 +3,7 @@ import { useExtractor } from '@/contexts/ExtractorContext';
 import { useApp } from '@/contexts/AppContext';
 import { CompositorLayer, ReferenceAsset } from '@/types';
 import { SkinSelector } from '@/components/shared/SkinSelector';
+import { ScreenColorPicker, resolveScreenColor, hexToRgb } from '@/components/shared/ScreenColorPicker';
 import { CompositorTimeline } from './CompositorTimeline';
 import { formatTimeShort } from '@/utils/timelineUtils';
 
@@ -17,23 +18,17 @@ const DEFAULT_TIMELINE_PROPS = {
   playbackRate: 1,
 };
 
-// Chroma key color map
-const CHROMA_COLORS: Record<string, [number, number, number]> = {
-  green: [0, 255, 12],
-  blue: [0, 216, 255],
-  pink: [255, 90, 241],
-};
-
 // ---- Chroma key pixel processing (with spill suppression + clip) ----
 function applyChromaKey(
   imageData: ImageData,
-  color: 'green' | 'blue' | 'pink',
+  color: string,
   tolerance: number,
   spillSuppression: number = 50,
   clipBlack: number = 0,
   clipWhite: number = 100
 ) {
-  const [cr, cg, cb] = CHROMA_COLORS[color];
+  const resolved = resolveScreenColor(color);
+  const [cr, cg, cb] = hexToRgb(resolved);
   const d = imageData.data;
   const tol = tolerance * 2.55; // 0-100 → 0-255
   const spillAmt = spillSuppression / 100; // 0-1
@@ -63,17 +58,23 @@ function applyChromaKey(
       // Spill suppression: desaturate and shift color away from key color on semi-transparent pixels
       if (spillAmt > 0 && alpha > 0 && alpha < 1) {
         const spillStrength = spillAmt * (1 - alpha); // stronger spill removal near key
-        // Compute the "spill" component: how much key-color is present
-        if (color === 'green') {
-          // Suppress green spill: reduce green channel, compensate with avg of R and B
+        // Determine dominant channel(s) of key color and suppress spill accordingly
+        const maxC = Math.max(cr, cg, cb);
+        if (cg === maxC && cg > cr && cg > cb) {
+          // Green-dominant: suppress green spill
           const avg = (r + b) / 2;
           d[i + 1] = Math.round(g - (g - avg) * spillStrength);
-        } else if (color === 'blue') {
+        } else if (cb === maxC && cb > cr && cb > cg) {
+          // Blue-dominant: suppress blue spill
           const avg = (r + g) / 2;
           d[i + 2] = Math.round(b - (b - avg) * spillStrength);
+        } else if (cr === maxC && cr > cg && cr > cb) {
+          // Red-dominant: suppress red spill
+          const avg = (g + b) / 2;
+          d[i] = Math.round(r - (r - avg) * spillStrength);
         } else {
-          // Pink: suppress both red and blue channels
-          const target = g; // use green as neutral
+          // Mixed (e.g. pink/magenta): suppress both red and blue
+          const target = g;
           d[i] = Math.round(r - (r - target) * spillStrength * 0.5);
           d[i + 2] = Math.round(b - (b - target) * spillStrength * 0.5);
         }
@@ -501,7 +502,7 @@ export const Compositor: React.FC = () => {
           id: layerId, type: 'video', name: asset.name || asset.type, src: asset.url,
           x: 0, y: (canvasHeight - vh * s) / 2,
           scaleX: s, scaleY: s, opacity: 1,
-          chromaKey: { enabled: false, color: 'green', tolerance: 40, spillSuppression: 50, clipBlack: 0, clipWhite: 100 },
+          chromaKey: { enabled: false, color: '#00fa15', tolerance: 40, spillSuppression: 50, clipBlack: 0, clipWhite: 100 },
           visible: true, locked: false,
           timelineStart: 0, mediaDuration: dur, trimIn: 0, trimOut: dur,
           loop: false, loopDuration: dur, playbackRate: 1,
@@ -514,7 +515,7 @@ export const Compositor: React.FC = () => {
         const newLayer: CompositorLayer = {
           id: layerId, type: 'video', name: asset.name || asset.type, src: asset.url,
           x: 0, y: 0, scaleX: s, scaleY: s, opacity: 1,
-          chromaKey: { enabled: false, color: 'green', tolerance: 40, spillSuppression: 50, clipBlack: 0, clipWhite: 100 },
+          chromaKey: { enabled: false, color: '#00fa15', tolerance: 40, spillSuppression: 50, clipBlack: 0, clipWhite: 100 },
           visible: true, locked: false,
           ...DEFAULT_TIMELINE_PROPS,
         };
@@ -527,7 +528,7 @@ export const Compositor: React.FC = () => {
         id: layerId, type: 'image', name: asset.name || asset.type, src: asset.url,
         x: 0, y: 0,
         scaleX: canvasWidth / 1920, scaleY: canvasWidth / 1920, opacity: 1,
-        chromaKey: { enabled: false, color: 'green', tolerance: 40, spillSuppression: 50, clipBlack: 0, clipWhite: 100 },
+        chromaKey: { enabled: false, color: '#00fa15', tolerance: 40, spillSuppression: 50, clipBlack: 0, clipWhite: 100 },
         visible: true, locked: false,
         ...DEFAULT_TIMELINE_PROPS,
       };
@@ -557,7 +558,7 @@ export const Compositor: React.FC = () => {
           id: layerId, type: 'video', name: file.name, src: url,
           x: 0, y: (canvasHeight - vh * s) / 2, // center vertically
           scaleX: s, scaleY: s, opacity: 1,
-          chromaKey: { enabled: false, color: 'green', tolerance: 40, spillSuppression: 50, clipBlack: 0, clipWhite: 100 },
+          chromaKey: { enabled: false, color: '#00fa15', tolerance: 40, spillSuppression: 50, clipBlack: 0, clipWhite: 100 },
           visible: true, locked: false,
           timelineStart: 0, mediaDuration: dur, trimIn: 0, trimOut: dur,
           loop: false, loopDuration: dur, playbackRate: 1,
@@ -569,7 +570,7 @@ export const Compositor: React.FC = () => {
         const newLayer: CompositorLayer = {
           id: layerId, type: 'video', name: file.name, src: url,
           x: 0, y: 0, scaleX: 1, scaleY: 1, opacity: 1,
-          chromaKey: { enabled: false, color: 'green', tolerance: 40, spillSuppression: 50, clipBlack: 0, clipWhite: 100 },
+          chromaKey: { enabled: false, color: '#00fa15', tolerance: 40, spillSuppression: 50, clipBlack: 0, clipWhite: 100 },
           visible: true, locked: false,
           ...DEFAULT_TIMELINE_PROPS,
         };
@@ -580,7 +581,7 @@ export const Compositor: React.FC = () => {
       const newLayer: CompositorLayer = {
         id: layerId, type: 'image', name: file.name, src: url,
         x: 0, y: 0, scaleX: 1, scaleY: 1, opacity: 1,
-        chromaKey: { enabled: false, color: 'green', tolerance: 40, spillSuppression: 50, clipBlack: 0, clipWhite: 100 },
+        chromaKey: { enabled: false, color: '#00fa15', tolerance: 40, spillSuppression: 50, clipBlack: 0, clipWhite: 100 },
         visible: true, locked: false,
         ...DEFAULT_TIMELINE_PROPS,
       };
@@ -1022,13 +1023,12 @@ export const Compositor: React.FC = () => {
 
                 {selectedLayer.chromaKey.enabled && (
                   <div className="flex flex-col gap-2">
-                    <div className="flex gap-2 mb-1">
-                      {(['green', 'blue', 'pink'] as const).map(c => (
-                        <button key={c} onClick={() => updateLayer(selectedLayer.id, { chromaKey: { ...selectedLayer.chromaKey, color: c } })}
-                          className={`w-8 h-8 rounded-lg border-2 transition-all ${selectedLayer.chromaKey.color === c ? 'border-white scale-110' : 'border-transparent opacity-50 hover:opacity-80'}`}
-                          style={{ backgroundColor: c === 'green' ? '#00fa15' : c === 'blue' ? '#0072ff' : '#ff4dfd' }}
-                        />
-                      ))}
+                    <div className="mb-1">
+                      <ScreenColorPicker
+                        value={selectedLayer.chromaKey.color}
+                        onChange={hex => updateLayer(selectedLayer.id, { chromaKey: { ...selectedLayer.chromaKey, color: hex } })}
+                        size="sm"
+                      />
                     </div>
                     <div>
                       <label className="text-[9px] text-zinc-600 font-bold uppercase">Screen Gain / Tolerance ({selectedLayer.chromaKey.tolerance})</label>

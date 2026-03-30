@@ -248,10 +248,8 @@ export const BannerExtractor: React.FC = () => {
   const [extractingIds, setExtractingIds] = useState<Set<number>>(new Set());
   const [retryingElementIds, setRetryingElementIds] = useState<Set<string>>(new Set());
   const [retryCountMap, setRetryCountMap] = useState<Record<string, number>>({});
-  const [extractedCount, setExtractedCount] = useState(() => {
-    // Initialize from existing extracted elements so counter isn't stale after tab switch
-    return project?.extractedElements.length || 0;
-  });
+  // processedInRun lives in project context so it survives tab switches
+  const processedInRun = project?.extractionProcessedCount || 0;
   const [failedIds, setFailedIds] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const hasStarted = useRef(false);
@@ -383,7 +381,7 @@ export const BannerExtractor: React.FC = () => {
     setIsAnalyzing(true);
     setError(null);
     setProject(prev => prev ? { ...prev, detectedElements: [] } : null);
-    setExtractedCount(0);
+
     setFailedIds(new Set());
     try {
       const elements = await analyzeBanner(project.sourceImage);
@@ -517,8 +515,7 @@ Output: A clean, full-body character on pure white background that matches EXACT
 
     const hasExisting = project.extractedElements.length > 0;
     // Don't clear elements — keep existing ones and update them live
-    setProject(prev => prev ? { ...prev, isExtracting: true } : null);
-    setExtractedCount(0);
+    setProject(prev => prev ? { ...prev, isExtracting: true, extractionProcessedCount: 0 } : null);
     setFailedIds(new Set());
     setExtractingIds(new Set());
     setError(null);
@@ -546,7 +543,7 @@ Output: A clean, full-body character on pure white background that matches EXACT
             return { ...prev, extractedElements: [...prev.extractedElements, result] };
           });
           saveToAssets(result);
-          setExtractedCount(prev => prev + 1);
+          setProject(prev => prev ? { ...prev, extractionProcessedCount: (prev.extractionProcessedCount || 0) + 1 } : null);
           setExtractingIds(prev => {
             const next = new Set(prev);
             next.delete(idx);
@@ -557,8 +554,9 @@ Output: A clean, full-body character on pure white background that matches EXACT
         1500, // 1.5s delay between batches
         (_err, _item, idx) => {
           localFailedCount++;
+          setProject(prev => prev ? { ...prev, extractionProcessedCount: (prev.extractionProcessedCount || 0) + 1 } : null);
           setFailedIds(prev => new Set(prev).add(idx));
-          setExtractedCount(prev => prev + 1);
+
           setExtractingIds(prev => {
             const next = new Set(prev);
             next.delete(idx);
@@ -1033,7 +1031,7 @@ Output: A clean, full-body character on pure white background.`;
                   {catElements.map(({ el, i }) => {
                     const isCurrentlyExtracting = extractingIds.has(i);
                     const hasFailed = failedIds.has(i);
-                    const isDone = extractedCount > i && !hasFailed && !isCurrentlyExtracting;
+                    const isDone = !hasFailed && !isCurrentlyExtracting && project?.extractedElements.some(e => e.label === el.label);
                     return (
                       <div key={i} className={`flex items-center gap-2 px-2.5 py-2 rounded-lg border text-xs transition-all ${
                         isCurrentlyExtracting
@@ -1174,11 +1172,11 @@ Output: A clean, full-body character on pure white background.`;
                 <div className="flex-1">
                   <div className="flex justify-between text-xs text-zinc-400 mb-1">
                     <span>AI extracting elements with transparency...</span>
-                    <span className="font-mono">{extractedCount} / {totalElements}</span>
+                    <span className="font-mono">{processedInRun} / {totalElements}</span>
                   </div>
                   <div className="h-1.5 bg-zinc-700 rounded-full overflow-hidden">
                     <div className="h-full bg-cyan-500 rounded-full transition-all duration-500"
-                      style={{ width: `${totalElements > 0 ? (extractedCount / totalElements) * 100 : 0}%` }} />
+                      style={{ width: `${totalElements > 0 ? (processedInRun / totalElements) * 100 : 0}%` }} />
                   </div>
                 </div>
               </div>

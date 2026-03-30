@@ -60,7 +60,7 @@ export interface CharacterState {
   videoPrompts: string[]; // up to 4 prompts
   videoCount: number; // 1-4 videos per prompt
   crop: Crop | null;
-  bgColor: 'green' | 'blue' | 'pink';
+  bgColor: string; // hex color e.g. '#00fa15', or preset name
   aspectRatio: '1:1' | '9:16' | '16:9' | '4:3';
   generatedVideos: { url: string; id: string; prompt?: string }[];
   isProcessingReskin: boolean;

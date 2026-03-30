@@ -104,3 +104,11 @@ export function removeFromSlotIndex(id: string) {
 export function removeFromBannerIndex(id: string) {
   writeIndex(BANNER_INDEX_KEY, readIndex(BANNER_INDEX_KEY).filter(e => e.id !== id));
 }
+
+export function updateSlotIndex(id: string, updates: Partial<SkinIndexEntry>) {
+  writeIndex(SLOT_INDEX_KEY, readIndex(SLOT_INDEX_KEY).map(e => e.id === id ? { ...e, ...updates } : e));
+}
+
+export function updateBannerIndex(id: string, updates: Partial<SkinIndexEntry>) {
+  writeIndex(BANNER_INDEX_KEY, readIndex(BANNER_INDEX_KEY).map(e => e.id === id ? { ...e, ...updates } : e));
+}

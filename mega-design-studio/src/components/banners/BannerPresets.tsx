@@ -24,6 +24,9 @@ export const BannerPresets: React.FC = () => {
   const { project, togglePreset, setSelectedPresets, setStage, generateCompositions } = useBanner();
 
   const selectedKeys = useMemo(() => new Set(project?.selectedPresets ?? []), [project?.selectedPresets]);
+  const existingKeys = useMemo(() => new Set(
+    (project?.compositions ?? []).map(c => c.presetKey).filter(Boolean)
+  ), [project?.compositions]);
 
   const grouped = useMemo(() => {
     const map = new Map<BannerPresetCategory, typeof BANNER_PRESETS>();
@@ -120,6 +123,7 @@ export const BannerPresets: React.FC = () => {
                 <div className="flex flex-wrap gap-2">
                   {presets.map(preset => {
                     const isSelected = selectedKeys.has(preset.key);
+                    const hasComposition = existingKeys.has(preset.key);
                     const isLandscape = preset.width > preset.height;
                     const isSquare = preset.width === preset.height;
 
@@ -128,15 +132,21 @@ export const BannerPresets: React.FC = () => {
                         key={preset.key}
                         onClick={() => togglePreset(preset.key)}
                         className={`group relative flex items-center gap-2 px-3 py-2 rounded-lg text-xs border transition-all ${
-                          isSelected
-                            ? 'bg-cyan-600/15 text-cyan-300 border-cyan-600/40 shadow-sm shadow-cyan-600/10'
-                            : 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:border-zinc-600 hover:text-zinc-300'
+                          hasComposition
+                            ? 'bg-emerald-600/15 text-emerald-300 border-emerald-600/40 shadow-sm shadow-emerald-600/10'
+                            : isSelected
+                              ? 'bg-cyan-600/15 text-cyan-300 border-cyan-600/40 shadow-sm shadow-cyan-600/10'
+                              : 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:border-zinc-600 hover:text-zinc-300'
                         }`}
                       >
+                        {/* Generated badge */}
+                        {hasComposition && (
+                          <i className="fa-solid fa-check-circle text-emerald-400 text-[9px] absolute -top-1 -right-1" />
+                        )}
                         {/* Aspect ratio indicator */}
                         <div
                           className={`shrink-0 border rounded-sm ${
-                            isSelected ? 'border-cyan-500/60' : 'border-zinc-600'
+                            hasComposition ? 'border-emerald-500/60' : isSelected ? 'border-cyan-500/60' : 'border-zinc-600'
                           }`}
                           style={{
                             width: isSquare ? 12 : isLandscape ? 16 : 10,
@@ -145,7 +155,7 @@ export const BannerPresets: React.FC = () => {
                         />
                         <div className="text-left">
                           <div className="font-medium">{preset.name}</div>
-                          <div className={`text-[10px] ${isSelected ? 'text-cyan-500/70' : 'text-zinc-600'}`}>
+                          <div className={`text-[10px] ${hasComposition ? 'text-emerald-500/70' : isSelected ? 'text-cyan-500/70' : 'text-zinc-600'}`}>
                             {preset.width} x {preset.height}
                           </div>
                         </div>
@@ -169,12 +179,27 @@ export const BannerPresets: React.FC = () => {
           Back
         </button>
         <div className="flex items-center gap-4">
-          <span className="text-sm text-zinc-400">
-            <span className={`font-bold ${selectedCount > 0 ? 'text-cyan-400' : 'text-zinc-500'}`}>
-              {selectedCount}
-            </span>
-            {' '}size{selectedCount !== 1 ? 's' : ''} selected
-          </span>
+          {(() => {
+            const newCount = [...selectedKeys].filter(k => !existingKeys.has(k)).length;
+            const existCount = existingKeys.size;
+            return (
+              <span className="text-sm text-zinc-400 flex items-center gap-3">
+                {existCount > 0 && (
+                  <span>
+                    <span className="font-bold text-emerald-400">{existCount}</span> existing
+                  </span>
+                )}
+                {newCount > 0 && (
+                  <span>
+                    <span className="font-bold text-cyan-400">{newCount}</span> new
+                  </span>
+                )}
+                {existCount === 0 && newCount === 0 && (
+                  <span><span className="font-bold text-zinc-500">0</span> selected</span>
+                )}
+              </span>
+            );
+          })()}
           <button
             disabled={selectedCount === 0 || project?.isGenerating}
             onClick={() => generateCompositions()}
@@ -191,7 +216,9 @@ export const BannerPresets: React.FC = () => {
               </>
             ) : (
               <>
-                Generate Banners
+                {[...selectedKeys].filter(k => !existingKeys.has(k)).length > 0
+                  ? `Generate ${[...selectedKeys].filter(k => !existingKeys.has(k)).length} New`
+                  : 'Continue'}
                 <i className="fa-solid fa-arrow-right ml-2" />
               </>
             )}

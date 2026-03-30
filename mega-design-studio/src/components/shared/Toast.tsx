@@ -12,7 +12,7 @@ interface ToastItem {
 }
 
 interface ToastContextType {
-  toast: (message: string, options?: { type?: ToastType; duration?: number }) => void;
+  toast: (message: string, options?: { type?: ToastType; duration?: number; sound?: boolean }) => void;
 }
 
 // ── Context ──
@@ -29,6 +29,48 @@ const TOAST_STYLES: Record<ToastType, { icon: string; border: string; iconColor:
   success: { icon: 'fa-check', border: 'border-emerald-600/40', iconColor: 'text-emerald-400' },
   error: { icon: 'fa-circle-exclamation', border: 'border-red-600/40', iconColor: 'text-red-400' },
   info: { icon: 'fa-circle-info', border: 'border-cyan-600/40', iconColor: 'text-cyan-400' },
+};
+
+// ── Notification sound via Web Audio API ──
+let audioCtx: AudioContext | null = null;
+const getAudioCtx = () => {
+  if (!audioCtx) audioCtx = new AudioContext();
+  return audioCtx;
+};
+
+const playNotificationSound = (type: ToastType) => {
+  try {
+    const ctx = getAudioCtx();
+    if (ctx.state === 'suspended') ctx.resume();
+    const now = ctx.currentTime;
+
+    if (type === 'error') {
+      // Single low tone
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(262, now); // C4
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.3);
+    } else {
+      // Pleasant ascending 2-tone chime
+      [523, 659].forEach((freq, i) => { // C5, E5
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        const t = now + i * 0.12;
+        osc.frequency.setValueAtTime(freq, t);
+        gain.gain.setValueAtTime(0.12, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.2);
+      });
+    }
+  } catch { /* silent — audio not available */ }
 };
 
 // ── Request browser notification permission once ──
@@ -59,10 +101,14 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (timer) { clearTimeout(timer); timersRef.current.delete(id); }
   }, []);
 
-  const toast = useCallback((message: string, options?: { type?: ToastType; duration?: number }) => {
+  const toast = useCallback((message: string, options?: { type?: ToastType; duration?: number; sound?: boolean }) => {
     const id = crypto.randomUUID();
     const type = options?.type ?? 'info';
     const duration = options?.duration ?? 4000;
+
+    // Play sound for success/error (skip info to avoid spam). Opt-out with sound: false
+    const shouldSound = options?.sound ?? (type === 'success' || type === 'error');
+    if (shouldSound) playNotificationSound(type);
 
     setToasts(prev => {
       const next = [...prev, { id, message, type, duration, exiting: false }];

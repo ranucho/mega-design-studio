@@ -129,7 +129,7 @@ export interface CompositorLayer {
   opacity: number;  // 0-1
   chromaKey: {
     enabled: boolean;
-    color: 'green' | 'blue' | 'pink';
+    color: string; // hex color e.g. '#00fa15', or preset name
     tolerance: number; // 0-100
     spillSuppression: number; // 0-100 — desaturate key-color spill on edge pixels
     clipBlack: number; // 0-100 — below this alpha → fully transparent
@@ -267,6 +267,7 @@ export interface BannerProject {
   stage: BannerStage;
   isExtracting: boolean;
   isGenerating: boolean;
+  extractionProcessedCount: number;  // tracks progress during current extraction run
 }
 
 export type BannerPresetCategory = 'app-stores' | 'facebook' | 'instagram' | 'google-display' | 'social' | 'web-email' | 'print';
@@ -350,6 +351,7 @@ export interface SlotSkin {
   masterImage: string;
   reskinResult: string;
   reelsFrame: string | null;
+  reelsFrameCropCoordinates?: { x: number; y: number; w: number; h: number } | null;
   symbols: SkinSymbolSnapshot[];
   gridState: string[][];
   gridRows: number;

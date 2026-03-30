@@ -6,6 +6,7 @@ import { useApp } from '@/contexts/AppContext';
 import { cleanImage, modifyImage, generateCharacterSheetFromReferences, generateAnimation, analyzeMotionInterval, refineVideoPrompt, describeVideoSegment, analyzeReelGrid, analyzeReskinResult } from '@/services/gemini';
 import { parallelBatch } from '@/services/parallelBatch';
 import { ReelGridAnalysis, SymbolConsistencyMap } from '@/types';
+import { useToast } from '@/components/shared/Toast';
 
 type OperationType = 'cleaning' | 'modifying';
 
@@ -20,6 +21,7 @@ export const StudioTab: React.FC = () => {
     loadingAction, setLoadingAction,
   } = useExtractor();
   const { addAsset } = useApp();
+  const { toast } = useToast();
 
   const isGeneratingSequenceRef = useRef(false);
   const [frameOperations, setFrameOperations] = useState<Map<string, OperationType>>(new Map());
@@ -241,8 +243,9 @@ export const StudioTab: React.FC = () => {
       // Clear ALL frame processing indicators to prevent stuck state
       setFrameOperations(new Map());
       setLoadingAction(null);
+      toast('All frames reskinned', { type: 'success' });
     }
-  }, [modificationPrompt, activeSegment, referenceAssets, masterSheetUrl, setSegments, setLoadingAction]);
+  }, [modificationPrompt, activeSegment, referenceAssets, masterSheetUrl, setSegments, setLoadingAction, toast]);
 
   const handleUndoBatch = () => {
     if (lastBatchSegment && activeSegmentId === lastBatchSegment.id) {
@@ -286,7 +289,8 @@ export const StudioTab: React.FC = () => {
     try {
       const sheetUrl = await generateCharacterSheetFromReferences(primaryRefs.map(r => r.url));
       setMasterSheetUrl(sheetUrl);
-    } catch (err) { console.error(err); } finally { setIsGeneratingSheet(false); setLoadingAction(null); }
+      toast('Character sheet generated', { type: 'success' });
+    } catch (err) { console.error(err); toast('Sheet generation failed', { type: 'error' }); } finally { setIsGeneratingSheet(false); setLoadingAction(null); }
   };
 
   const handleReplaceAssetClick = (id: string) => { setReplacingAssetId(id); replaceAssetInputRef.current?.click(); };
@@ -356,6 +360,7 @@ export const StudioTab: React.FC = () => {
       );
     } finally {
       setIsGeneratingMotionPrompts(false);
+      toast('Motion prompts generated', { type: 'success' });
       setLoadingAction(null);
     }
   }, [activeSegment, activeSegmentId, setLoadingAction, setSegments]);
@@ -406,7 +411,8 @@ export const StudioTab: React.FC = () => {
         4,
         800,
       );
-    } catch (err: any) { console.error(err); } finally { isGeneratingSequenceRef.current = false; setLoadingAction(null); }
+      toast('Video clips generated', { type: 'success' });
+    } catch (err: any) { console.error(err); toast('Video generation failed', { type: 'error' }); } finally { isGeneratingSequenceRef.current = false; setLoadingAction(null); }
   }, [activeSegment, activeSegmentId, generationQuality, videoAspectRatio, setLoadingAction, setSegments, addAsset]);
 
   const handleDeleteClip = (clipId: string) => { setSegments(prev => prev.map(seg => ({ ...seg, generatedClips: seg.generatedClips.filter(c => c.id !== clipId) }))); };

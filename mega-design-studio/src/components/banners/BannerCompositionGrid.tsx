@@ -38,34 +38,31 @@ const CompThumbnail: React.FC<{ composition: BannerComposition; width: number; h
 
     const scale = Math.min(width / composition.width, height / composition.height);
 
-    ctx.clearRect(0, 0, width, height);
-
-    if (contain) {
-      // In contain mode, center the composition within the canvas and show the full image
-      ctx.fillStyle = '#18181b'; // Dark bg for empty space
-      ctx.fillRect(0, 0, width, height);
-      const renderW = composition.width * scale;
-      const renderH = composition.height * scale;
-      const offsetX = (width - renderW) / 2;
-      const offsetY = (height - renderH) / 2;
-      ctx.save();
-      ctx.translate(offsetX, offsetY);
-      ctx.scale(scale, scale);
-      // Fill composition background within the offset area
-      ctx.fillStyle = composition.backgroundColor || '#000';
-      ctx.fillRect(0, 0, composition.width, composition.height);
-    } else {
-      ctx.fillStyle = composition.backgroundColor || '#000';
-      ctx.fillRect(0, 0, width, height);
-      ctx.save();
-      ctx.scale(scale, scale);
-    }
-
     let pending = 0;
     const draw = () => {
-      ctx.clearRect(0, 0, composition.width, composition.height);
+      ctx.clearRect(0, 0, width, height);
+
+      if (contain) {
+        ctx.fillStyle = '#18181b';
+        ctx.fillRect(0, 0, width, height);
+        const renderW = composition.width * scale;
+        const renderH = composition.height * scale;
+        const offsetX = (width - renderW) / 2;
+        const offsetY = (height - renderH) / 2;
+        ctx.save();
+        ctx.translate(offsetX, offsetY);
+        ctx.scale(scale, scale);
+      } else {
+        ctx.save();
+        ctx.scale(scale, scale);
+      }
+
       ctx.fillStyle = composition.backgroundColor || '#000';
       ctx.fillRect(0, 0, composition.width, composition.height);
+      // Clip to composition bounds so layers don't bleed outside
+      ctx.beginPath();
+      ctx.rect(0, 0, composition.width, composition.height);
+      ctx.clip();
 
       for (const layer of composition.layers) {
         if (!layer.visible) continue;
@@ -74,7 +71,7 @@ const CompThumbnail: React.FC<{ composition: BannerComposition; width: number; h
 
         if (layer.type === 'image' && layer.src) {
           let img = imageCacheRef.current.get(layer.id);
-          if (!img) {
+          if (!img || img.src !== layer.src) {
             img = new Image();
             img.src = layer.src;
             imageCacheRef.current.set(layer.id, img);
@@ -99,10 +96,10 @@ const CompThumbnail: React.FC<{ composition: BannerComposition; width: number; h
 
         ctx.restore();
       }
+      ctx.restore();
     };
 
     draw();
-    ctx.restore();
   }, [composition, width, height]);
 
   return <canvas ref={canvasRef} width={width} height={height} className="rounded" />;

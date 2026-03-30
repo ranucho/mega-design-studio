@@ -92,7 +92,7 @@ const DEFAULT_CHARACTER_STATE: CharacterState = {
   videoPrompts: [''],
   videoCount: 1,
   crop: null,
-  bgColor: 'green',
+  bgColor: '#00fa15',
   aspectRatio: '9:16',
   generatedVideos: [],
   isProcessingReskin: false,
