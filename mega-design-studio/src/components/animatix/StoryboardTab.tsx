@@ -424,7 +424,7 @@ export const StoryboardTab: React.FC = () => {
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             Storyboard <span className="text-xs bg-indigo-900/50 px-2 py-0.5 rounded text-indigo-400 border border-indigo-500/30">{scenes.length} Scenes</span>
           </h2>
-          <p className="text-xs text-zinc-500 mt-1 max-w-md line-clamp-1">{brief}</p>
+          <p className="text-xs text-zinc-400 mt-1 max-w-md line-clamp-1">{brief}</p>
         </div>
         <div className="flex gap-3 items-center">
           <AspectRatioSelector
@@ -489,7 +489,7 @@ export const StoryboardTab: React.FC = () => {
                 {char.masterBlueprint ? (
                   <img src={char.masterBlueprint} className="w-full h-full object-contain" />
                 ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center text-zinc-600 gap-3">
+                  <div className="w-full h-full flex flex-col items-center justify-center text-zinc-400 gap-3">
                     <div className="animate-spin h-10 w-10 border-2 border-zinc-700 border-t-indigo-500 rounded-full"></div>
                     <span className="text-[10px] uppercase font-black tracking-widest">Constructing Actor...</span>
                   </div>
@@ -581,7 +581,7 @@ export const StoryboardTab: React.FC = () => {
                   </>
                 ) : (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-zinc-900/50">
-                    <span className="text-xs text-zinc-500 font-medium">No footage available</span>
+                    <span className="text-xs text-zinc-400 font-medium">No footage available</span>
                     <Button variant="primary" onClick={() => handleRegenerateImage(originalIndex)} className="text-xs">
                       Generate Shot
                     </Button>
@@ -640,16 +640,16 @@ export const StoryboardTab: React.FC = () => {
               {/* Content Body */}
               <div className="flex-1 p-4 flex flex-col gap-3 bg-zinc-900/50 border-t border-zinc-800/50">
                 <div className="bg-zinc-950 p-3 rounded-lg border border-zinc-800 relative group/dialogue">
-                  <span className="absolute top-1 left-2 text-[9px] text-zinc-600 font-bold uppercase tracking-wider">Dialogue</span>
+                  <span className="absolute top-1 left-2 text-[9px] text-zinc-400 font-bold uppercase tracking-wider">Dialogue</span>
                   <p className="text-sm text-indigo-200 italic font-medium pt-3 leading-relaxed">"{scene.dialogue}"</p>
                 </div>
                 <div className="flex-1 space-y-2">
                   <div className="flex items-start gap-2">
-                    <span className="text-[10px] font-bold text-zinc-500 uppercase mt-0.5 w-12 shrink-0">Visual</span>
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase mt-0.5 w-12 shrink-0">Visual</span>
                     <p className="text-xs text-zinc-400 line-clamp-3 leading-relaxed">{scene.visual_prompt}</p>
                   </div>
                   <div className="flex items-start gap-2">
-                    <span className="text-[10px] font-bold text-zinc-500 uppercase mt-0.5 w-12 shrink-0">Action</span>
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase mt-0.5 w-12 shrink-0">Action</span>
                     <p className="text-xs text-zinc-400 line-clamp-2 leading-relaxed">{scene.action_prompt}</p>
                   </div>
                 </div>
@@ -661,7 +661,7 @@ export const StoryboardTab: React.FC = () => {
         {/* Add Scene Card */}
         <button
           onClick={() => setAddSceneModal({ isOpen: true, insertIndex: scenes.length })}
-          className={`border-2 border-dashed border-zinc-800 rounded-2xl flex flex-col items-center justify-center p-8 gap-4 text-zinc-600 hover:text-indigo-400 hover:border-indigo-500/50 hover:bg-zinc-900/50 transition-all min-h-[400px] ${!isApproved ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+          className={`border-2 border-dashed border-zinc-800 rounded-2xl flex flex-col items-center justify-center p-8 gap-4 text-zinc-400 hover:text-indigo-400 hover:border-indigo-500/50 hover:bg-zinc-900/50 transition-all min-h-[400px] ${!isApproved ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
         >
           <div className="w-16 h-16 rounded-full bg-zinc-900 flex items-center justify-center border border-zinc-800 transition-colors shadow-xl">
             <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
@@ -676,7 +676,7 @@ export const StoryboardTab: React.FC = () => {
           <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
             <div className="p-6 border-b border-zinc-800 flex justify-between items-center shrink-0">
               <h3 className="text-xl font-bold text-white uppercase tracking-tight">Modify Identity & Assets</h3>
-              <button onClick={() => setCharEditModal(null)} className="text-zinc-500 hover:text-white">
+              <button onClick={() => setCharEditModal(null)} className="text-zinc-400 hover:text-white">
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
@@ -684,11 +684,11 @@ export const StoryboardTab: React.FC = () => {
               <div className="grid md:grid-cols-2 gap-8">
                 <div className="space-y-6">
                   <div>
-                    <label className="text-xs text-zinc-500 uppercase font-black block mb-2">Actor Name</label>
+                    <label className="text-xs text-zinc-400 uppercase font-black block mb-2">Actor Name</label>
                     <input value={charEditModal.name} onChange={(e) => setCharEditModal(prev => prev ? { ...prev, name: e.target.value } : null)} className="w-full bg-zinc-950 border border-zinc-700 rounded p-3 text-sm text-white focus:border-indigo-500 outline-none" />
                   </div>
                   <div>
-                    <label className="text-xs text-zinc-500 uppercase font-black block mb-2">Physical Description</label>
+                    <label className="text-xs text-zinc-400 uppercase font-black block mb-2">Physical Description</label>
                     <textarea value={charEditModal.description} onChange={(e) => setCharEditModal(prev => prev ? { ...prev, description: e.target.value } : null)} className="w-full h-40 bg-zinc-950 border border-zinc-700 rounded p-3 text-sm text-white focus:border-indigo-500 outline-none resize-none" placeholder="Hair color, clothes, build..." />
                   </div>
                   <div className="bg-indigo-950/30 border border-indigo-500/20 p-4 rounded-lg">
@@ -699,7 +699,7 @@ export const StoryboardTab: React.FC = () => {
                 </div>
                 <div className="space-y-6">
                   <div>
-                    <label className="text-xs text-zinc-500 uppercase font-black block mb-3">Input References (3 Slots)</label>
+                    <label className="text-xs text-zinc-400 uppercase font-black block mb-3">Input References (3 Slots)</label>
                     <div className="grid grid-cols-3 gap-3">
                       {[0, 1, 2].map(idx => (
                         <div key={idx} className="relative aspect-square bg-zinc-950 border border-zinc-700 rounded-lg overflow-hidden flex items-center justify-center group/ref">
@@ -724,8 +724,8 @@ export const StoryboardTab: React.FC = () => {
                             </>
                           ) : (
                             <label className="w-full h-full flex flex-col items-center justify-center cursor-pointer hover:bg-zinc-800 transition-colors">
-                              <svg className="w-5 h-5 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                              <span className="text-[9px] font-bold text-zinc-600 mt-1">REF {idx + 1}</span>
+                              <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                              <span className="text-[9px] font-bold text-zinc-400 mt-1">REF {idx + 1}</span>
                               <input type="file" accept="image/*" className="hidden" onChange={(e) => handleCharRefUpload(idx, e)} />
                             </label>
                           )}
@@ -734,7 +734,7 @@ export const StoryboardTab: React.FC = () => {
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs text-zinc-500 uppercase font-black block mb-3">Master Style Sheet</label>
+                    <label className="text-xs text-zinc-400 uppercase font-black block mb-3">Master Style Sheet</label>
                     <div className="relative aspect-video bg-zinc-950 border border-zinc-700 rounded-lg overflow-hidden flex items-center justify-center group/blueprint">
                       {charEditModal.masterBlueprint ? (
                         <>
@@ -750,8 +750,8 @@ export const StoryboardTab: React.FC = () => {
                         </>
                       ) : (
                         <label className="w-full h-full flex flex-col items-center justify-center cursor-pointer hover:bg-zinc-800 transition-colors border-2 border-dashed border-zinc-800 hover:border-indigo-500/50">
-                          <svg className="w-8 h-8 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                          <span className="text-xs font-bold text-zinc-500 mt-2 uppercase">Upload Master Style Sheet</span>
+                          <svg className="w-8 h-8 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                          <span className="text-xs font-bold text-zinc-400 mt-2 uppercase">Upload Master Style Sheet</span>
                           <input type="file" accept="image/*" className="hidden" onChange={handleCharBlueprintUpload} />
                         </label>
                       )}
@@ -775,13 +775,13 @@ export const StoryboardTab: React.FC = () => {
             <div className="flex border-b border-zinc-800 shrink-0">
               <button
                 onClick={() => setEditModal(prev => prev ? { ...prev, activeTab: 'script' } : null)}
-                className={`flex-1 py-4 text-sm font-bold uppercase tracking-wider transition-colors ${editModal.activeTab === 'script' ? 'bg-zinc-900 text-indigo-400 border-b-2 border-indigo-500' : 'bg-zinc-950 text-zinc-500 hover:text-zinc-300'}`}
+                className={`flex-1 py-4 text-sm font-bold uppercase tracking-wider transition-colors ${editModal.activeTab === 'script' ? 'bg-zinc-900 text-indigo-400 border-b-2 border-indigo-500' : 'bg-zinc-950 text-zinc-400 hover:text-zinc-300'}`}
               >
                 Script & Direction
               </button>
               <button
                 onClick={() => setEditModal(prev => prev ? { ...prev, activeTab: 'fix' } : null)}
-                className={`flex-1 py-4 text-sm font-bold uppercase tracking-wider transition-colors ${editModal.activeTab === 'fix' ? 'bg-zinc-900 text-indigo-400 border-b-2 border-indigo-500' : 'bg-zinc-950 text-zinc-500 hover:text-zinc-300'}`}
+                className={`flex-1 py-4 text-sm font-bold uppercase tracking-wider transition-colors ${editModal.activeTab === 'fix' ? 'bg-zinc-900 text-indigo-400 border-b-2 border-indigo-500' : 'bg-zinc-950 text-zinc-400 hover:text-zinc-300'}`}
               >
                 Magic Fix (In-Painting)
               </button>
@@ -790,15 +790,15 @@ export const StoryboardTab: React.FC = () => {
               {editModal.activeTab === 'script' ? (
                 <div className="space-y-6">
                   <div>
-                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-2">Dialogue</label>
+                    <label className="text-xs font-bold text-zinc-400 uppercase block mb-2">Dialogue</label>
                     <input value={tempDialogue} onChange={(e) => setTempDialogue(e.target.value)} className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-3 text-white focus:border-indigo-500 outline-none" />
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-2">Visual Description (Image Gen)</label>
+                    <label className="text-xs font-bold text-zinc-400 uppercase block mb-2">Visual Description (Image Gen)</label>
                     <textarea value={tempVisual} onChange={(e) => setTempVisual(e.target.value)} className="w-full h-32 bg-zinc-950 border border-zinc-700 rounded-lg p-3 text-white focus:border-indigo-500 outline-none resize-none" />
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-2">Motion Prompt (Video Gen)</label>
+                    <label className="text-xs font-bold text-zinc-400 uppercase block mb-2">Motion Prompt (Video Gen)</label>
                     <textarea value={tempAction} onChange={(e) => setTempAction(e.target.value)} className="w-full h-24 bg-zinc-950 border border-zinc-700 rounded-lg p-3 text-white focus:border-indigo-500 outline-none resize-none" />
                   </div>
                 </div>
@@ -813,7 +813,7 @@ export const StoryboardTab: React.FC = () => {
                     </p>
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-zinc-500 uppercase block mb-2">Instruction</label>
+                    <label className="text-xs font-bold text-zinc-400 uppercase block mb-2">Instruction</label>
                     <input
                       value={fixInstruction}
                       onChange={(e) => setFixInstruction(e.target.value)}

@@ -28,7 +28,7 @@ export const AssetManager: React.FC<AssetManagerProps> = ({ compact = false }) =
     return (
       <div className="text-center py-8 border border-dashed border-zinc-800 rounded-xl bg-zinc-900/20">
         <i className="fas fa-box-open text-2xl text-zinc-700 mb-2" />
-        <p className="text-zinc-500 text-xs">No shared assets yet. Generate assets in Toolkit or create character blueprints in Storyboard.</p>
+        <p className="text-zinc-400 text-xs">No shared assets yet. Generate assets in Toolkit or create character blueprints in Storyboard.</p>
       </div>
     );
   }

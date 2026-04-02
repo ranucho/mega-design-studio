@@ -82,7 +82,7 @@ export const BannerLuckyReskin: React.FC<ReskinModalProps> = ({ onClose }) => {
             <i className="fa-solid fa-spinner fa-spin text-purple-400" />
             <div className="flex-1 min-w-0">
               <div className="text-xs font-medium text-white">Reskinning banner...</div>
-              <div className="text-[9px] text-zinc-500 truncate">{theme}</div>
+              <div className="text-[9px] text-zinc-400 truncate">{theme}</div>
             </div>
           </div>
         ) : (
@@ -114,7 +114,7 @@ export const BannerLuckyReskin: React.FC<ReskinModalProps> = ({ onClose }) => {
           <div className="flex gap-4">
             <div className="flex-1">
               <label className="text-xs font-semibold text-zinc-300 block mb-1">
-                <i className="fa-solid fa-user mr-1 text-blue-400" /> Character <span className="text-zinc-600 font-normal">(opt.)</span>
+                <i className="fa-solid fa-user mr-1 text-blue-400" /> Character <span className="text-zinc-400 font-normal">(opt.)</span>
               </label>
               <div className="flex gap-2 items-start">
                 {characterRef ? (
@@ -126,7 +126,7 @@ export const BannerLuckyReskin: React.FC<ReskinModalProps> = ({ onClose }) => {
                   </div>
                 ) : (
                   <button onClick={() => charInputRef.current?.click()} disabled={isGenerating}
-                    className="w-12 h-12 rounded-lg border-2 border-dashed border-zinc-700 hover:border-zinc-500 flex flex-col items-center justify-center text-zinc-500 hover:text-zinc-300 transition-colors">
+                    className="w-12 h-12 rounded-lg border-2 border-dashed border-zinc-700 hover:border-zinc-500 flex flex-col items-center justify-center text-zinc-400 hover:text-zinc-300 transition-colors">
                     <i className="fa-solid fa-plus text-[9px]" />
                   </button>
                 )}
@@ -136,7 +136,7 @@ export const BannerLuckyReskin: React.FC<ReskinModalProps> = ({ onClose }) => {
             </div>
             <div className="flex-1">
               <label className="text-xs font-semibold text-zinc-300 block mb-1">
-                <i className="fa-solid fa-swatchbook mr-1 text-amber-400" /> Palette <span className="text-zinc-600 font-normal">(opt.)</span>
+                <i className="fa-solid fa-swatchbook mr-1 text-amber-400" /> Palette <span className="text-zinc-400 font-normal">(opt.)</span>
               </label>
               <input type="text" value={palette} onChange={e => setPalette(e.target.value)}
                 placeholder="e.g. Blue and gold..."
@@ -156,14 +156,14 @@ export const BannerLuckyReskin: React.FC<ReskinModalProps> = ({ onClose }) => {
         {/* Footer */}
         <div className="px-5 py-3 border-t border-zinc-800 flex items-center justify-between">
           <button onClick={onClose} disabled={isGenerating}
-            className="px-3 py-1.5 text-xs text-zinc-500 hover:text-white border border-zinc-700 rounded-lg transition-colors disabled:opacity-50">
+            className="px-3 py-1.5 text-xs text-zinc-400 hover:text-white border border-zinc-700 rounded-lg transition-colors disabled:opacity-50">
             Cancel
           </button>
           <button disabled={!theme.trim() || isGenerating} onClick={handleReskin}
             className={`px-5 py-2 text-xs font-medium rounded-lg transition-all shadow-lg flex items-center gap-2 ${
               theme.trim() && !isGenerating
                 ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-purple-600/20'
-                : 'bg-zinc-700 text-zinc-500 cursor-not-allowed shadow-none'
+                : 'bg-zinc-700 text-zinc-400 cursor-not-allowed shadow-none'
             }`}>
             <i className="fa-solid fa-palette" /> Reskin
           </button>

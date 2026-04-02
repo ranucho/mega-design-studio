@@ -110,7 +110,7 @@ export const BannersTab: React.FC = () => {
                     ? 'bg-cyan-600/20 text-cyan-400 border border-cyan-600/40'
                     : isClickable
                       ? 'text-cyan-600 hover:text-cyan-400 cursor-pointer'
-                      : 'text-zinc-600 cursor-default'
+                      : 'text-zinc-400 cursor-default'
                 }`}
               >
                 <i className={`fa-solid ${s.icon}`} />
@@ -149,7 +149,7 @@ export const BannersTab: React.FC = () => {
             <div className="shrink-0 flex items-center justify-between px-4 py-2.5 bg-zinc-900/60 border-t border-zinc-800">
               <button
                 onClick={() => setStage('presets')}
-                className="px-3 py-1.5 text-xs text-zinc-500 hover:text-white border border-zinc-700 rounded-lg transition-colors"
+                className="px-3 py-1.5 text-xs text-zinc-400 hover:text-white border border-zinc-700 rounded-lg transition-colors"
               >
                 <i className="fa-solid fa-arrow-left mr-1" />
                 Back to Sizes
@@ -186,7 +186,7 @@ export const BannersTab: React.FC = () => {
                 {activeComposition ? (
                   <BannerCanvas composition={activeComposition} />
                 ) : (
-                  <div className="flex items-center justify-center h-full text-zinc-500 text-sm">
+                  <div className="flex items-center justify-center h-full text-zinc-400 text-sm">
                     <i className="fa-solid fa-mouse-pointer mr-2" />
                     Select a composition to edit
                   </div>
@@ -213,7 +213,7 @@ export const BannersTab: React.FC = () => {
               <div className="flex items-center justify-between px-3 py-2">
                 <button
                   onClick={() => setEditView('gallery')}
-                  className="px-3 py-1.5 text-xs text-zinc-500 hover:text-white border border-zinc-700 rounded-lg transition-colors flex items-center gap-1.5"
+                  className="px-3 py-1.5 text-xs text-zinc-400 hover:text-white border border-zinc-700 rounded-lg transition-colors flex items-center gap-1.5"
                 >
                   <i className="fa-solid fa-grid-2" />
                   Back to Gallery
@@ -221,7 +221,7 @@ export const BannersTab: React.FC = () => {
                 <div className="flex gap-2">
                   <button
                     onClick={() => setStage('presets')}
-                    className="px-3 py-1.5 text-xs text-zinc-500 hover:text-white border border-zinc-700 rounded-lg transition-colors"
+                    className="px-3 py-1.5 text-xs text-zinc-400 hover:text-white border border-zinc-700 rounded-lg transition-colors"
                   >
                     <i className="fa-solid fa-arrow-left mr-1" />
                     Sizes

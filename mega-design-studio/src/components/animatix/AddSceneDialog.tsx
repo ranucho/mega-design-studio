@@ -108,13 +108,13 @@ const ImageCropper: React.FC<{
 
       <div className="p-3 bg-zinc-900 border-t border-zinc-800 flex flex-col gap-3 shrink-0">
         <div className="flex items-center gap-4 px-4">
-          <svg className="w-4 h-4 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
+          <svg className="w-4 h-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
           <input
             type="range" min="0.1" max="3" step="0.05"
             value={zoomLevel} onChange={handleZoomSlide}
             className="flex-1 h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
           />
-          <svg className="w-5 h-5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+          <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
         </div>
         <div className="flex justify-center gap-4">
           <button onClick={() => rotate(-90)} className="p-2 text-zinc-400 hover:text-white bg-zinc-800 rounded-lg" title="Rotate Left">
@@ -248,10 +248,10 @@ export const AddSceneDialog: React.FC<AddSceneDialogProps> = ({
             {!croppedImage ? (
               <label className="flex items-center justify-center w-full h-24 border-2 border-dashed border-zinc-700 rounded-lg hover:border-indigo-500 hover:bg-zinc-800/50 transition-colors cursor-pointer group">
                 <div className="flex flex-col items-center gap-1">
-                  <svg className="w-6 h-6 text-zinc-500 group-hover:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-6 h-6 text-zinc-400 group-hover:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
-                  <span className="text-xs text-zinc-500 font-medium">Click to upload & crop</span>
+                  <span className="text-xs text-zinc-400 font-medium">Click to upload & crop</span>
                 </div>
                 <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
               </label>

@@ -124,41 +124,56 @@ export function loadSlotSkinIntoState(
   skin: SlotSkin,
   setSymbolGenState: React.Dispatch<React.SetStateAction<SymbolGeneratorState>>,
 ) {
-  setSymbolGenState(prev => ({
-    ...prev,
-    masterImage: skin.masterImage,
-    reskinResult: skin.reskinResult,
-    masterPrompt: skin.masterPrompt,
-    activeMasterView: skin.reskinResult ? 'reskinned' : 'source',
-    reelsFrame: skin.reelsFrame,
-    reelsFrameCropCoordinates: skin.reelsFrameCropCoordinates || null,
-    symbols: skin.symbols.map(s => ({
-      id: s.id,
-      name: s.name,
-      sourceUrl: s.isolatedUrl,
-      rawCropDataUrl: s.rawCropDataUrl,
-      isolatedUrl: s.isolatedUrl,
-      isProcessing: false,
-      cropCoordinates: s.cropCoordinates,
-      cropSourceView: 'reskinned' as const,
-      spanRows: s.spanRows,
-      withFrame: s.withFrame,
-      symbolRole: s.symbolRole,
-      scaleX: s.scaleX,
-      scaleY: s.scaleY,
-      lockScale: true,
-    })),
-    gridState: skin.gridState,
-    gridRows: skin.gridRows,
-    gridCols: skin.gridCols,
-    layoutOffsetX: skin.layoutOffsetX,
-    layoutOffsetY: skin.layoutOffsetY,
-    layoutWidth: skin.layoutWidth,
-    layoutHeight: skin.layoutHeight,
-    layoutGutterHorizontal: skin.layoutGutterHorizontal,
-    layoutGutterVertical: skin.layoutGutterVertical,
-    symbolScale: skin.symbolScale,
-  }));
+  setSymbolGenState(prev => {
+    const skinMasterView = skin.reskinResult ? 'reskinned' as const : 'source' as const;
+    // The frame-level fields that mirror to top-level
+    const frameData = {
+      masterImage: skin.masterImage,
+      reskinResult: skin.reskinResult,
+      masterPrompt: skin.masterPrompt,
+      activeMasterView: skinMasterView,
+      reelsFrame: skin.reelsFrame,
+      reelsFrameCropCoordinates: skin.reelsFrameCropCoordinates || null,
+    };
+    // Also update the active sourceFrame so the sync effect doesn't later
+    // overwrite the skin with stale pre-load frame data
+    const frames = prev.sourceFrames ?? [];
+    const frameId = prev.activeSourceFrameId ?? frames[0]?.id;
+    const updatedFrames = frames.map(f =>
+      f.id === frameId ? { ...f, ...frameData, isProcessingMaster: false } : f
+    );
+    return {
+      ...prev,
+      ...frameData,
+      sourceFrames: updatedFrames,
+      symbols: skin.symbols.map(s => ({
+        id: s.id,
+        name: s.name,
+        sourceUrl: s.isolatedUrl,
+        rawCropDataUrl: s.rawCropDataUrl,
+        isolatedUrl: s.isolatedUrl,
+        isProcessing: false,
+        cropCoordinates: s.cropCoordinates,
+        cropSourceView: 'reskinned' as const,
+        spanRows: s.spanRows,
+        withFrame: s.withFrame,
+        symbolRole: s.symbolRole,
+        scaleX: s.scaleX,
+        scaleY: s.scaleY,
+        lockScale: true,
+      })),
+      gridState: skin.gridState,
+      gridRows: skin.gridRows,
+      gridCols: skin.gridCols,
+      layoutOffsetX: skin.layoutOffsetX,
+      layoutOffsetY: skin.layoutOffsetY,
+      layoutWidth: skin.layoutWidth,
+      layoutHeight: skin.layoutHeight,
+      layoutGutterHorizontal: skin.layoutGutterHorizontal,
+      layoutGutterVertical: skin.layoutGutterVertical,
+      symbolScale: skin.symbolScale,
+    };
+  });
 }
 
 // --- Slot Skin Update (overwrite existing skin with current state) ---

@@ -53,6 +53,41 @@ export interface SymbolItem {
   scaleY?: number;
   /** If true, scaleX and scaleY are locked together (uniform scaling). */
   lockScale?: boolean;
+  /** Which source frame this symbol was extracted from (optional, for display) */
+  sourceFrameId?: string;
+  /** True while AI upscaling is running */
+  isUpscaling?: boolean;
+  /** Upscaled image URLs keyed by scale factor — both can coexist */
+  upscaledUrls?: { 2?: string; 3?: string };
+}
+
+export interface SourceFrame {
+  id: string;
+  name: string;
+  masterImage: string | null;
+  reskinResult: string | null;
+  reelsFrame: string | null;
+  reelsFrameCropCoordinates?: { x: number; y: number; w: number; h: number } | null;
+  masterPrompt: string;
+  isProcessingMaster: boolean;
+  activeMasterView: 'source' | 'reskinned';
+}
+
+export interface SlotLayout {
+  id: string;
+  name: string;
+  sourceFrameId: string | null;  // which frame's reelsFrame to use as background
+  gridRows: number;
+  gridCols: number;
+  gridState: string[][];
+  layoutOffsetX: number;
+  layoutOffsetY: number;
+  layoutWidth: number;
+  layoutHeight: number;
+  layoutGutterHorizontal: number;
+  layoutGutterVertical: number;
+  symbolScale: number;
+  hideReelsBg: boolean;
 }
 
 export interface ReelGridAnalysis {
@@ -91,6 +126,7 @@ export interface SymbolGeneratorState {
   reelsFrameCropCoordinates?: { x: number; y: number; w: number; h: number } | null;
 
   // Layout
+  hideReelsBg?: boolean;
   gridRows: number;
   gridCols: number;
   gridState: string[][];
@@ -108,12 +144,21 @@ export interface SymbolGeneratorState {
   selectedStartFrameId: string | null;
   selectedEndFrameId: string | null;
   animationPrompt: string;
-  generatedVideos: { url: string; id: string }[];
+  animationPrompts: string[];
+  animationVideoCount: number;
+  generatedVideos: { url: string; id: string; prompt?: string }[];
   isGeneratingVideo: boolean;
 
   prompt: string;
   isProcessing: boolean;
   activeSubTab: 'master' | 'extract' | 'layout';
+
+  // Multi-frame support
+  sourceFrames: SourceFrame[];
+  activeSourceFrameId: string | null;
+  // Multi-layout support
+  layouts: SlotLayout[];
+  activeLayoutId: string | null;
 }
 
 // --- Compositor ---
@@ -145,6 +190,10 @@ export interface CompositorLayer {
   loop: boolean;            // Loop the trimmed region
   loopDuration: number;     // Total timeline duration when looping (seconds)
   playbackRate: number;     // Speed multiplier (default 1)
+  freezeLastFrame?: boolean; // Hold last frame after clip ends (for videos)
+  freezeDuration?: number;   // How long to hold the freeze frame (seconds)
+  color?: string;            // Custom clip/track accent color (hex)
+  muted?: boolean;           // Mute audio for this layer (default false)
 }
 
 export interface CompositorState {

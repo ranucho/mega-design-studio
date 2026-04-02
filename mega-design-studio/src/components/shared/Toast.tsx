@@ -145,7 +145,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               <span className="text-xs text-zinc-200 flex-1 leading-relaxed">{t.message}</span>
               <button
                 onClick={() => removeToast(t.id)}
-                className="text-zinc-600 hover:text-zinc-300 transition-colors shrink-0 ml-1"
+                className="text-zinc-400 hover:text-zinc-300 transition-colors shrink-0 ml-1"
               >
                 <i className="fa-solid fa-xmark text-[10px]" />
               </button>

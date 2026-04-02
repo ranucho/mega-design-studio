@@ -288,7 +288,7 @@ export const TheLab: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* LEFT: ISOLATION TOOL */}
           <div className="flex flex-col gap-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 relative">
-            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500 flex justify-between">
+            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400 flex justify-between">
               <span>1. Isolate & Define</span>
               {sourceImage && <span className="text-indigo-400">Drag to crop &bull; Resize corners</span>}
             </h3>
@@ -330,7 +330,7 @@ export const TheLab: React.FC = () => {
                   )}
                 </div>
               ) : (
-                <div className="text-zinc-600 flex flex-col items-center pointer-events-none">
+                <div className="text-zinc-400 flex flex-col items-center pointer-events-none">
                   <i className="fas fa-crop-simple text-4xl mb-2" />
                   <span>Load an image to start</span>
                 </div>
@@ -339,7 +339,7 @@ export const TheLab: React.FC = () => {
 
             {/* FRAMES STRIP */}
             <div className="h-20 bg-zinc-950 border border-zinc-800 rounded-lg p-2 flex gap-2 overflow-x-auto scrollbar-hide items-center">
-              {allFrames.length === 0 && <span className="text-[10px] text-zinc-600 px-2">No frames captured yet. Go to 'Capture' tab.</span>}
+              {allFrames.length === 0 && <span className="text-[10px] text-zinc-400 px-2">No frames captured yet. Go to 'Capture' tab.</span>}
               {allFrames.map(f => (
                 <button
                   key={f.id}
@@ -352,7 +352,7 @@ export const TheLab: React.FC = () => {
             </div>
 
             <div className="flex flex-col gap-2">
-              <label className="text-[10px] uppercase font-bold text-zinc-500">Restyle Prompt</label>
+              <label className="text-[10px] uppercase font-bold text-zinc-400">Restyle Prompt</label>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -374,7 +374,7 @@ export const TheLab: React.FC = () => {
 
           {/* RIGHT: RESULTS */}
           <div className="flex flex-col gap-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6">
-            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500">2. Review & Save</h3>
+            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400">2. Review & Save</h3>
             <div className="flex-1 bg-black/50 rounded-xl border border-zinc-800 flex items-center justify-center relative overflow-hidden min-h-[400px]">
               {generatedImage ? (
                 <div className="relative group w-full h-full flex items-center justify-center p-8">
@@ -387,7 +387,7 @@ export const TheLab: React.FC = () => {
 
             <div className="flex flex-col gap-4">
               <div>
-                <label className="text-[10px] uppercase font-bold text-zinc-500 mb-1 block">Trigger Word / Name (Optional)</label>
+                <label className="text-[10px] uppercase font-bold text-zinc-400 mb-1 block">Trigger Word / Name (Optional)</label>
                 <input
                   type="text" value={assetName} onChange={(e) => setAssetName(e.target.value)}
                   placeholder='e.g. "Main Hero" or "Cyber-Skull"'
@@ -396,7 +396,7 @@ export const TheLab: React.FC = () => {
               </div>
               <div className="flex gap-4 items-end">
                 <div className="flex-1">
-                  <label className="text-[10px] uppercase font-bold text-zinc-500 mb-1 block">Asset Type</label>
+                  <label className="text-[10px] uppercase font-bold text-zinc-400 mb-1 block">Asset Type</label>
                   <select
                     value={assetType} onChange={(e) => setAssetType(e.target.value as AssetType)}
                     className="w-full bg-zinc-800 text-white text-xs rounded-lg px-3 py-2 border border-zinc-700 outline-none focus:border-indigo-500"
@@ -429,7 +429,7 @@ export const TheLab: React.FC = () => {
               <h2 className="text-lg font-black uppercase tracking-tighter text-white flex items-center gap-2">
                 <i className="fas fa-video text-indigo-500" /> Generated Videos
               </h2>
-              <span className="text-[10px] text-zinc-500 uppercase font-bold">
+              <span className="text-[10px] text-zinc-400 uppercase font-bold">
                 {segments.reduce((acc, s) => acc + s.generatedClips.length, 0)} Clips
               </span>
             </div>
@@ -443,7 +443,7 @@ export const TheLab: React.FC = () => {
                     <div className="p-3 flex justify-between items-center border-t border-zinc-800">
                       <span className="text-xs font-bold text-zinc-300">Clip #{clip.index}</span>
                       <div className="flex gap-2">
-                        <span className="text-[10px] text-zinc-500 font-mono">{(clip.originalDuration || 0).toFixed(1)}s</span>
+                        <span className="text-[10px] text-zinc-400 font-mono">{(clip.originalDuration || 0).toFixed(1)}s</span>
                         <a href={clip.url} download={`clip-${clip.index}.mp4`} className="text-zinc-400 hover:text-indigo-400 transition-colors" title="Download">
                           <i className="fas fa-download text-xs" />
                         </a>
@@ -460,7 +460,7 @@ export const TheLab: React.FC = () => {
         <section className="mt-4 border-t border-zinc-800 pt-8">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-lg font-black uppercase tracking-tighter text-white flex items-center gap-2">
-              <i className="fas fa-th-large text-zinc-500" /> Asset Gallery
+              <i className="fas fa-th-large text-zinc-400" /> Asset Gallery
             </h2>
             {mergedAssets.length > 0 && (
               <button onClick={handleDownloadAllAssets} disabled={isZipping} className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded-lg text-xs font-bold uppercase transition-colors flex items-center gap-2 border border-zinc-700 disabled:opacity-50">
@@ -471,7 +471,7 @@ export const TheLab: React.FC = () => {
           </div>
           {mergedAssets.length === 0 ? (
             <div className="text-center py-12 border border-dashed border-zinc-800 rounded-2xl bg-zinc-900/20">
-              <p className="text-zinc-500 text-sm">No assets uploaded or generated yet.</p>
+              <p className="text-zinc-400 text-sm">No assets uploaded or generated yet.</p>
             </div>
           ) : (
             groupedAssets.map(cat => (
@@ -479,7 +479,7 @@ export const TheLab: React.FC = () => {
                   <div className="flex items-center gap-2 mb-4">
                     <i className={`fas ${cat.icon} ${cat.color} text-sm`} />
                     <h3 className="text-sm font-black uppercase tracking-widest text-zinc-300">{cat.label}</h3>
-                    <span className="text-[10px] text-zinc-600 font-mono ml-1">({cat.assets.length})</span>
+                    <span className="text-[10px] text-zinc-400 font-mono ml-1">({cat.assets.length})</span>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                     {cat.assets.map((asset) => {

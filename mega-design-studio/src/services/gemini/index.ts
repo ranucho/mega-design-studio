@@ -20,6 +20,7 @@ export {
   extractReelsFrame,
   cleanReelsFrameWithReference,
   generateBackgroundImage,
+  upscaleSymbol,
   SYMBOL_WIDTH,
   SYMBOL_HEIGHT,
   LONG_TILE_WIDTH,

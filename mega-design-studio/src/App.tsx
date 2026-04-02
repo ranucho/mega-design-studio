@@ -55,7 +55,7 @@ const AppContent: React.FC = () => {
         </div>
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 cursor-pointer" title={showParticles ? 'Hide Particles' : 'Show Particles'}>
-            <span className="text-xs text-zinc-500">Particles</span>
+            <span className="text-xs text-zinc-400">Particles</span>
             <div
               className={`relative w-8 h-[18px] rounded-full transition-colors ${showParticles ? 'bg-indigo-500' : 'bg-zinc-700'}`}
               onClick={() => setShowParticles(p => !p)}
@@ -86,7 +86,7 @@ const AppContent: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-sm font-bold text-white">Google Gemini API Key</h3>
-                <p className="text-[10px] text-zinc-500">Required for AI features. Get yours at ai.google.dev</p>
+                <p className="text-[10px] text-zinc-400">Required for AI features. Get yours at ai.google.dev</p>
               </div>
             </div>
             <input
@@ -106,7 +106,7 @@ const AppContent: React.FC = () => {
               <div className="flex gap-2">
                 {keyConfigured && (
                   <button onClick={() => setShowApiKeyModal(false)}
-                    className="px-3 py-1.5 text-xs text-zinc-500 hover:text-white border border-zinc-700 rounded-lg transition-colors">
+                    className="px-3 py-1.5 text-xs text-zinc-400 hover:text-white border border-zinc-700 rounded-lg transition-colors">
                     Cancel
                   </button>
                 )}
@@ -115,7 +115,7 @@ const AppContent: React.FC = () => {
                   className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all ${
                     apiKeyInput.trim() && !apiKeyInput.endsWith('...')
                       ? 'bg-blue-600 hover:bg-blue-500 text-white'
-                      : 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
+                      : 'bg-zinc-700 text-zinc-400 cursor-not-allowed'
                   }`}>
                   Save Key
                 </button>

@@ -65,7 +65,7 @@ export const BannerLayerPanel: React.FC<BannerLayerPanelProps> = ({ composition 
     <div className="flex flex-col h-full bg-zinc-900/60">
       <div className="px-3 py-2 border-b border-zinc-800 flex items-center justify-between">
         <h3 className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">Layers</h3>
-        <span className="text-[9px] text-zinc-600">{layers.length} — top to bottom</span>
+        <span className="text-[9px] text-zinc-400">{layers.length} — top to bottom</span>
       </div>
       <div className="flex-1 overflow-auto">
         {displayLayers.map((layer) => {
@@ -87,19 +87,19 @@ export const BannerLayerPanel: React.FC<BannerLayerPanelProps> = ({ composition 
                   {layer.type === 'image' && layer.src ? (
                     <img src={layer.src} alt="" className="w-full h-full object-cover rounded" />
                   ) : layer.type === 'text' ? (
-                    <span className="text-[8px] text-zinc-400 font-bold">Aa</span>
+                    <span className="text-sm text-zinc-400 font-bold">Aa</span>
                   ) : (
-                    <i className="fa-solid fa-shapes text-[8px] text-zinc-500" />
+                    <i className="fa-solid fa-shapes text-sm text-zinc-400" />
                   )}
                 </div>
 
                 {/* Name + role */}
                 <div className="flex-1 min-w-0">
-                  <div className={`text-[11px] truncate ${isSelected ? 'text-cyan-300' : layer.visible ? 'text-zinc-300' : 'text-zinc-600 line-through'}`}>
+                  <div className={`text-sm font-medium truncate ${isSelected ? 'text-cyan-300' : layer.visible ? 'text-zinc-200' : 'text-zinc-500 line-through'}`}>
                     {layer.name}
                   </div>
                   <span
-                    className="text-[8px] font-bold uppercase"
+                    className="text-[10px] font-bold uppercase"
                     style={{ color: ROLE_COLORS[layer.role] }}
                   >
                     {layer.role}
@@ -111,51 +111,51 @@ export const BannerLayerPanel: React.FC<BannerLayerPanelProps> = ({ composition 
                   <button
                     onClick={(e) => { e.stopPropagation(); moveLayer(layer.id, 'up'); }}
                     title="Move Up (front)"
-                    className="w-5 h-5 flex items-center justify-center text-zinc-600 hover:text-white transition-colors"
+                    className="w-7 h-7 flex items-center justify-center text-zinc-400 hover:text-white transition-colors"
                   >
-                    <i className="fa-solid fa-chevron-up text-[8px]" />
+                    <i className="fa-solid fa-chevron-up text-sm" />
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); moveLayer(layer.id, 'down'); }}
                     title="Move Down (back)"
-                    className="w-5 h-5 flex items-center justify-center text-zinc-600 hover:text-white transition-colors"
+                    className="w-7 h-7 flex items-center justify-center text-zinc-400 hover:text-white transition-colors"
                   >
-                    <i className="fa-solid fa-chevron-down text-[8px]" />
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setExpandedOpacity(showOpacity ? null : layer.id); }}
-                    className={`w-5 h-5 flex items-center justify-center transition-colors ${showOpacity ? 'text-cyan-400' : 'text-zinc-600 hover:text-zinc-400'}`}
-                    title={`Opacity ${Math.round(layer.opacity * 100)}%`}
-                  >
-                    <i className="fa-solid fa-circle-half-stroke text-[8px]" />
+                    <i className="fa-solid fa-chevron-down text-sm" />
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); updateLayer(composition.id, layer.id, { visible: !layer.visible }); }}
-                    className={`w-5 h-5 flex items-center justify-center transition-colors ${layer.visible ? 'text-zinc-400 hover:text-white' : 'text-zinc-700'}`}
+                    className={`w-7 h-7 flex items-center justify-center transition-colors ${layer.visible ? 'text-zinc-400 hover:text-white' : 'text-zinc-600 hover:text-zinc-400'}`}
                     title={layer.visible ? 'Hide' : 'Show'}
                   >
-                    <i className={`fa-solid ${layer.visible ? 'fa-eye' : 'fa-eye-slash'} text-[8px]`} />
+                    <i className={`fa-solid ${layer.visible ? 'fa-eye' : 'fa-eye-slash'} text-sm`} />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setExpandedOpacity(showOpacity ? null : layer.id); }}
+                    className={`w-7 h-7 flex items-center justify-center transition-colors ${showOpacity ? 'text-cyan-400' : 'text-zinc-400 hover:text-white'}`}
+                    title={`Opacity ${Math.round(layer.opacity * 100)}%`}
+                  >
+                    <i className="fa-solid fa-circle-half-stroke text-sm" />
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); updateLayer(composition.id, layer.id, { locked: !layer.locked }); }}
-                    className={`w-5 h-5 flex items-center justify-center transition-colors ${layer.locked ? 'text-yellow-500' : 'text-zinc-600 hover:text-zinc-400'}`}
+                    className={`w-7 h-7 flex items-center justify-center transition-colors ${layer.locked ? 'text-amber-400' : 'text-zinc-400 hover:text-amber-400'}`}
                     title={layer.locked ? 'Unlock' : 'Lock'}
                   >
-                    <i className={`fa-solid ${layer.locked ? 'fa-lock' : 'fa-lock-open'} text-[8px]`} />
+                    <i className={`fa-solid ${layer.locked ? 'fa-lock' : 'fa-lock-open'} text-sm`} />
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); duplicateLayer(layer.id); }}
                     title="Duplicate Layer"
-                    className="w-5 h-5 flex items-center justify-center text-zinc-700 hover:text-zinc-400 transition-colors"
+                    className="w-7 h-7 flex items-center justify-center text-zinc-400 hover:text-white transition-colors"
                   >
-                    <i className="fa-solid fa-clone text-[8px]" />
+                    <i className="fa-solid fa-clone text-sm" />
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); deleteLayer(layer.id); }}
                     title="Delete Layer"
-                    className="w-5 h-5 flex items-center justify-center text-zinc-700 hover:text-red-400 transition-colors"
+                    className="w-7 h-7 flex items-center justify-center text-zinc-400 hover:text-red-400 transition-colors"
                   >
-                    <i className="fa-solid fa-trash text-[8px]" />
+                    <i className="fa-solid fa-trash text-sm" />
                   </button>
                 </div>
               </div>
@@ -163,7 +163,7 @@ export const BannerLayerPanel: React.FC<BannerLayerPanelProps> = ({ composition 
               {/* Inline opacity slider */}
               {showOpacity && (
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800/60 border-b border-zinc-800/50">
-                  <span className="text-[9px] text-zinc-500 w-5 shrink-0">Op</span>
+                  <span className="text-[9px] text-zinc-400 w-5 shrink-0">Op</span>
                   <input
                     type="range"
                     min={0} max={1} step={0.01}

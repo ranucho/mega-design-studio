@@ -42,7 +42,7 @@ export const AspectRatioSelector: React.FC<AspectRatioSelectorProps> = ({
             } ${
               isActive
                 ? 'bg-cyan-600/20 border-cyan-600/50 text-cyan-400 shadow-sm shadow-cyan-600/10'
-                : 'border-zinc-700/60 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600'
+                : 'border-zinc-700/60 text-zinc-400 hover:text-zinc-300 hover:border-zinc-600'
             }`}
             title={vis.label ? `${vis.label} (${ratio})` : ratio}
           >

@@ -54,7 +54,7 @@ export const ClipTrimmer: React.FC<ClipTrimmerProps> = ({
 
   return (
     <div className="flex flex-col gap-2 w-full select-none">
-      <div className="flex justify-between text-[10px] font-mono text-zinc-500 uppercase font-bold">
+      <div className="flex justify-between text-[10px] font-mono text-zinc-400 uppercase font-bold">
         <span>In: {trimStart.toFixed(2)}s</span>
         <span>Dur: {(trimEnd - trimStart).toFixed(2)}s</span>
         <span>Out: {trimEnd.toFixed(2)}s</span>
@@ -120,7 +120,7 @@ export const ClipTrimmer: React.FC<ClipTrimmerProps> = ({
           </div>
         </div>
       </div>
-      <p className="text-[10px] text-zinc-600 text-center">Drag purple handles to trim start/end points</p>
+      <p className="text-[10px] text-zinc-400 text-center">Drag purple handles to trim start/end points</p>
     </div>
   );
 };

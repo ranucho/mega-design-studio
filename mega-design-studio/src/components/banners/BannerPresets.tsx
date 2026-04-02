@@ -99,9 +99,9 @@ export const BannerPresets: React.FC = () => {
               <div key={cat.key} className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <i className={`fa-brands ${CATEGORY_ICONS[cat.key]} text-zinc-500 text-sm`} />
+                    <i className={`fa-brands ${CATEGORY_ICONS[cat.key]} text-zinc-400 text-sm`} />
                     <h3 className="text-sm font-semibold text-zinc-300">{cat.label}</h3>
-                    <span className="text-[10px] text-zinc-600">({catSelected}/{presets.length})</span>
+                    <span className="text-[10px] text-zinc-400">({catSelected}/{presets.length})</span>
                   </div>
                   <button
                     onClick={() => {
@@ -114,7 +114,7 @@ export const BannerPresets: React.FC = () => {
                         setSelectedPresets(Array.from(merged));
                       }
                     }}
-                    className="text-[10px] text-zinc-500 hover:text-cyan-400 transition-colors uppercase tracking-wider"
+                    className="text-[10px] text-zinc-400 hover:text-cyan-400 transition-colors uppercase tracking-wider"
                   >
                     {allCatSelected ? 'Deselect all' : 'Select all'}
                   </button>
@@ -155,7 +155,7 @@ export const BannerPresets: React.FC = () => {
                         />
                         <div className="text-left">
                           <div className="font-medium">{preset.name}</div>
-                          <div className={`text-[10px] ${hasComposition ? 'text-emerald-500/70' : isSelected ? 'text-cyan-500/70' : 'text-zinc-600'}`}>
+                          <div className={`text-[10px] ${hasComposition ? 'text-emerald-500/70' : isSelected ? 'text-cyan-500/70' : 'text-zinc-400'}`}>
                             {preset.width} x {preset.height}
                           </div>
                         </div>
@@ -195,7 +195,7 @@ export const BannerPresets: React.FC = () => {
                   </span>
                 )}
                 {existCount === 0 && newCount === 0 && (
-                  <span><span className="font-bold text-zinc-500">0</span> selected</span>
+                  <span><span className="font-bold text-zinc-400">0</span> selected</span>
                 )}
               </span>
             );
@@ -206,7 +206,7 @@ export const BannerPresets: React.FC = () => {
             className={`px-6 py-2.5 text-sm font-medium rounded-lg transition-all shadow-lg ${
               selectedCount > 0 && !project?.isGenerating
                 ? 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-cyan-600/20'
-                : 'bg-zinc-700 text-zinc-500 cursor-not-allowed shadow-none'
+                : 'bg-zinc-700 text-zinc-400 cursor-not-allowed shadow-none'
             }`}
           >
             {project?.isGenerating ? (

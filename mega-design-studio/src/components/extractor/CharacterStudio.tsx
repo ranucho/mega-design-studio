@@ -253,13 +253,13 @@ Output: A clean, full-body character on pure white background.`;
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
         {/* LEFT: Source */}
         <div className="flex flex-col gap-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6">
-          <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500">1. Source Image</h3>
+          <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400">1. Source Image</h3>
 
           {/* Upload + Load from Assets buttons */}
           <div className="flex gap-3">
             <label className="flex-1 flex flex-col items-center justify-center h-28 border-2 border-dashed border-zinc-700 rounded-xl hover:border-pink-500 hover:bg-zinc-800/50 transition-all cursor-pointer group">
-              <i className="fas fa-upload text-xl text-zinc-600 group-hover:text-pink-400 mb-1" />
-              <span className="text-[10px] font-bold text-zinc-500 group-hover:text-zinc-300 uppercase">Upload Image</span>
+              <i className="fas fa-upload text-xl text-zinc-400 group-hover:text-pink-400 mb-1" />
+              <span className="text-[10px] font-bold text-zinc-400 group-hover:text-zinc-300 uppercase">Upload Image</span>
               <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
             </label>
             <button
@@ -267,8 +267,8 @@ Output: A clean, full-body character on pure white background.`;
               disabled={labAssets.length === 0}
               className="flex-1 flex flex-col items-center justify-center h-28 border-2 border-dashed border-zinc-700 rounded-xl hover:border-pink-500 hover:bg-zinc-800/50 transition-all disabled:opacity-30 group"
             >
-              <i className="fas fa-flask text-xl text-zinc-600 group-hover:text-pink-400 mb-1" />
-              <span className="text-[10px] font-bold text-zinc-500 group-hover:text-zinc-300 uppercase">Load from Assets</span>
+              <i className="fas fa-flask text-xl text-zinc-400 group-hover:text-pink-400 mb-1" />
+              <span className="text-[10px] font-bold text-zinc-400 group-hover:text-zinc-300 uppercase">Load from Assets</span>
               {labAssets.length > 0 && (
                 <span className="bg-pink-600 text-white px-2 py-0.5 rounded-full text-[9px] mt-1">{labAssets.length}</span>
               )}
@@ -297,7 +297,7 @@ Output: A clean, full-body character on pure white background.`;
                 )}
               </div>
             ) : (
-              <div className="text-zinc-600 flex flex-col items-center pointer-events-none gap-2 text-center p-8">
+              <div className="text-zinc-400 flex flex-col items-center pointer-events-none gap-2 text-center p-8">
                 <i className="fas fa-user text-4xl mb-2" />
                 <span>Upload or load a source image with a character</span>
               </div>
@@ -318,7 +318,7 @@ Output: A clean, full-body character on pure white background.`;
         <div className="flex flex-col gap-6">
           {/* Extracted / Generated result */}
           <div className="flex flex-col gap-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 flex-1">
-            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500">2. Character Result</h3>
+            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400">2. Character Result</h3>
             <div className="flex-1 bg-black rounded-xl border border-zinc-800 relative overflow-hidden flex items-center justify-center min-h-[250px]">
               {generatedImage ? (
                 <img src={generatedImage} className="max-w-full max-h-[50vh] object-contain" />
@@ -334,7 +334,7 @@ Output: A clean, full-body character on pure white background.`;
               <>
                 {/* Reskin controls */}
                 <div className="flex flex-col gap-2 border-t border-zinc-800 pt-3">
-                  <label className="text-[10px] uppercase font-bold text-zinc-500">Optional: Reskin</label>
+                  <label className="text-[10px] uppercase font-bold text-zinc-400">Optional: Reskin</label>
                   <div className="flex gap-2">
                     <input type="text" className="flex-1 bg-black border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:border-pink-500 outline-none"
                       placeholder='E.g. "Cyberpunk samurai, high detail"'
@@ -365,7 +365,7 @@ Output: A clean, full-body character on pure white background.`;
 
             {characterSheet && (
               <div className="p-4 bg-black/40 rounded-xl border border-zinc-800 animate-in fade-in">
-                <h4 className="text-[10px] font-bold text-zinc-500 uppercase mb-2">Character Sheet</h4>
+                <h4 className="text-[10px] font-bold text-zinc-400 uppercase mb-2">Character Sheet</h4>
                 <img src={characterSheet} className="w-full h-auto object-contain rounded-lg border border-zinc-800" />
                 <button onClick={() => handleAddToAssets(characterSheet, 'Character Sheet')}
                   className="mt-2 w-full text-[10px] bg-zinc-800 hover:bg-green-600 text-white py-2 rounded transition-colors uppercase font-bold">
@@ -380,10 +380,10 @@ Output: A clean, full-body character on pure white background.`;
       {/* STEP 3: CHROMA KEY */}
       {generatedImage && (
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 mb-8 animate-in slide-in-from-bottom-4">
-          <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500 mb-4">3. Chroma Key — Background Separation</h3>
+          <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400 mb-4">3. Chroma Key — Background Separation</h3>
           <div className="flex items-center gap-6">
             <div className="flex flex-col gap-2">
-              <label className="text-[10px] uppercase font-bold text-zinc-500">Screen Color</label>
+              <label className="text-[10px] uppercase font-bold text-zinc-400">Screen Color</label>
               <ScreenColorPicker value={bgColor} onChange={hex => updateState({ bgColor: hex })} size="md" />
             </div>
             <button onClick={handleChromaKey} disabled={isProcessingIsolation}
@@ -396,7 +396,7 @@ Output: A clean, full-body character on pure white background.`;
             <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in">
               {/* Preview */}
               <div className="bg-black border border-zinc-800 rounded-xl overflow-hidden p-3 relative">
-                <span className="text-[9px] text-zinc-500 font-bold uppercase block mb-1">Isolated Preview</span>
+                <span className="text-[9px] text-zinc-400 font-bold uppercase block mb-1">Isolated Preview</span>
                 <img src={isolatedImage} className="w-full h-auto object-contain" />
                 {isProcessingVideo && (
                   <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center z-20 backdrop-blur-sm">
@@ -412,18 +412,18 @@ Output: A clean, full-body character on pure white background.`;
 
               {/* Animation controls */}
               <div className="lg:col-span-2 flex flex-col gap-4">
-                <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500">4. Animate</h3>
+                <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400">4. Animate</h3>
 
                 {/* Multi-prompt inputs */}
                 <div className="flex flex-col gap-3">
                   {videoPrompts.map((vp, idx) => (
                     <div key={idx} className="flex gap-2 items-start">
-                      <span className="text-[10px] text-zinc-600 font-bold mt-2.5 w-4 text-right">{idx + 1}.</span>
+                      <span className="text-[10px] text-zinc-400 font-bold mt-2.5 w-4 text-right">{idx + 1}.</span>
                       <textarea className="flex-1 bg-black border border-zinc-700 rounded-lg p-2 text-sm text-white focus:border-pink-500 outline-none resize-none h-16"
                         placeholder={idx === 0 ? 'E.g. "Running forward", "Idle breathing"' : 'Another action...'}
                         value={vp} onChange={e => updatePrompt(idx, e.target.value)} />
                       {videoPrompts.length > 1 && (
-                        <button onClick={() => removePromptSlot(idx)} className="text-zinc-600 hover:text-red-400 mt-2 transition-colors">
+                        <button onClick={() => removePromptSlot(idx)} className="text-zinc-400 hover:text-red-400 mt-2 transition-colors">
                           <i className="fas fa-times" />
                         </button>
                       )}
@@ -431,7 +431,7 @@ Output: A clean, full-body character on pure white background.`;
                   ))}
                   {videoPrompts.length < 4 && (
                     <button onClick={addPromptSlot}
-                      className="text-[10px] text-zinc-500 hover:text-pink-400 uppercase font-bold flex items-center gap-1 self-start ml-6 transition-colors">
+                      className="text-[10px] text-zinc-400 hover:text-pink-400 uppercase font-bold flex items-center gap-1 self-start ml-6 transition-colors">
                       <i className="fas fa-plus" /> Add Prompt (up to 4)
                     </button>
                   )}
@@ -439,16 +439,16 @@ Output: A clean, full-body character on pure white background.`;
 
                 {/* Video count */}
                 <div className="flex items-center gap-4">
-                  <label className="text-[10px] uppercase font-bold text-zinc-500">Per prompt:</label>
+                  <label className="text-[10px] uppercase font-bold text-zinc-400">Per prompt:</label>
                   <div className="flex gap-1">
                     {[1, 2, 3, 4].map(n => (
                       <button key={n} onClick={() => updateState({ videoCount: n })}
-                        className={`w-10 h-10 rounded-lg text-sm font-black transition-all ${videoCount === n ? 'bg-pink-600 text-white shadow-lg scale-105' : 'bg-zinc-800 text-zinc-500 hover:text-white hover:bg-zinc-700 border border-zinc-700'}`}>
+                        className={`w-10 h-10 rounded-lg text-sm font-black transition-all ${videoCount === n ? 'bg-pink-600 text-white shadow-lg scale-105' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 border border-zinc-700'}`}>
                         {n}
                       </button>
                     ))}
                   </div>
-                  {totalVideos > 0 && <span className="text-[10px] text-zinc-500 italic">= {totalVideos} total</span>}
+                  {totalVideos > 0 && <span className="text-[10px] text-zinc-400 italic">= {totalVideos} total</span>}
                 </div>
 
                 <button onClick={handleGenerateVideos} disabled={!isolatedImage || activePromptCount === 0 || isProcessingVideo}
@@ -466,7 +466,7 @@ Output: A clean, full-body character on pure white background.`;
       {/* VIDEO GALLERY */}
       {generatedVideos.length > 0 && (
         <div className="border-t border-zinc-800 pt-6">
-          <h4 className="text-xs font-bold text-zinc-500 uppercase mb-4">Generated Videos</h4>
+          <h4 className="text-xs font-bold text-zinc-400 uppercase mb-4">Generated Videos</h4>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {generatedVideos.map(vid => (
               <div key={vid.id} className="bg-black rounded-lg overflow-hidden border border-zinc-800 group relative">
@@ -500,11 +500,11 @@ Output: A clean, full-body character on pure white background.`;
               <h3 className="text-lg font-black uppercase tracking-widest text-white flex items-center gap-2">
                 <i className="fas fa-folder-open text-pink-500" /> Load from Assets
               </h3>
-              <button onClick={() => setShowLabPicker(false)} className="text-zinc-500 hover:text-white"><i className="fas fa-times" /></button>
+              <button onClick={() => setShowLabPicker(false)} className="text-zinc-400 hover:text-white"><i className="fas fa-times" /></button>
             </div>
             <div className="flex-1 overflow-y-auto p-6">
               {labAssets.length === 0 ? (
-                <div className="text-center py-12 text-zinc-500">No assets available.</div>
+                <div className="text-center py-12 text-zinc-400">No assets available.</div>
               ) : (
                 <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
                   {labAssets.map(asset => (

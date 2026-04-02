@@ -572,8 +572,8 @@ export const MovieTab: React.FC = () => {
         {/* Sidebar */}
         <div className="w-80 bg-zinc-900 border-r border-zinc-800 flex flex-col shrink-0">
           <div className="flex border-b border-zinc-800">
-            <button onClick={() => setSidebarTab('library')} className={`flex-1 py-3 text-sm font-semibold ${sidebarTab === 'library' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>Library</button>
-            <button onClick={() => setSidebarTab('music')} className={`flex-1 py-3 text-sm font-semibold relative overflow-hidden ${sidebarTab === 'music' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            <button onClick={() => setSidebarTab('library')} className={`flex-1 py-3 text-sm font-semibold ${sidebarTab === 'library' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-300'}`}>Library</button>
+            <button onClick={() => setSidebarTab('music')} className={`flex-1 py-3 text-sm font-semibold relative overflow-hidden ${sidebarTab === 'music' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-300'}`}>
               Soundtrack
               <div className="absolute top-1 right-[-20px] rotate-45 bg-indigo-600 text-[8px] text-white px-5 py-0.5 font-bold shadow-sm">SOON</div>
             </button>
@@ -602,7 +602,7 @@ export const MovieTab: React.FC = () => {
           {sidebarTab === 'music' && (
             <div className="p-4 flex-1 flex flex-col items-center justify-center text-center space-y-4">
               <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mb-2 animate-pulse">
-                <svg className="w-8 h-8 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-8 h-8 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
                 </svg>
               </div>
@@ -641,7 +641,7 @@ export const MovieTab: React.FC = () => {
               </div>
             )
           ) : (
-            <div className="text-zinc-500 flex flex-col items-center"><p>No scenes in timeline.</p></div>
+            <div className="text-zinc-400 flex flex-col items-center"><p>No scenes in timeline.</p></div>
           )}
         </div>
       </div>
@@ -678,7 +678,7 @@ export const MovieTab: React.FC = () => {
               <button onClick={() => setTimeFormat('frames')} className={`px-2 py-1 text-[9px] font-bold uppercase rounded ${timeFormat === 'frames' ? 'bg-zinc-600 text-white' : 'text-zinc-400'}`}>FRM</button>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-zinc-500">Zoom</span>
+              <span className="text-xs text-zinc-400">Zoom</span>
               <input type="range" min="5" max="100" value={zoom} onChange={(e) => setZoom(parseInt(e.target.value))} className="w-24 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
             </div>
             <Button onClick={exportFullMovie} disabled={isExporting} className="h-7 text-xs px-4 bg-indigo-600 hover:bg-indigo-500 border-none">
@@ -700,7 +700,7 @@ export const MovieTab: React.FC = () => {
             onDrop={(e) => handleDrop(e, -1)}
           >
             {/* Ruler */}
-            <div className="h-6 border-b border-zinc-700/50 flex items-end text-[10px] text-zinc-500 select-none bg-[#181825] sticky top-0 z-30" onMouseDown={handleTimelineMouseDown}>
+            <div className="h-6 border-b border-zinc-700/50 flex items-end text-[10px] text-zinc-400 select-none bg-[#181825] sticky top-0 z-30" onMouseDown={handleTimelineMouseDown}>
               {Array.from({ length: Math.ceil(Math.max(10, totalSequenceDuration + (audioTrack ? audioTrack.duration : 0)) / 5) + 5 }).map((_, i) => (
                 <div key={i} className="absolute bottom-0 border-l border-zinc-700 pl-1 h-3 pointer-events-none" style={{ left: `${i * 5 * zoom + 16}px` }}>{timeFormat === 'frames' ? `${i * 5 * 30}f` : `${i * 5}s`}</div>
               ))}
@@ -714,9 +714,9 @@ export const MovieTab: React.FC = () => {
 
             {/* Video Track */}
             <div className="absolute top-8 left-4 h-24 flex items-center w-full">
-              <div className="absolute -left-14 top-8 text-[10px] font-bold text-zinc-500 w-10 text-right">V1</div>
+              <div className="absolute -left-14 top-8 text-[10px] font-bold text-zinc-400 w-10 text-right">V1</div>
               {validScenes.length === 0 && (
-                <div className="absolute top-0 left-0 h-full w-[500px] flex items-center justify-center border-2 border-dashed border-zinc-700 rounded-lg bg-zinc-800/30 text-zinc-500 gap-3 pointer-events-none">
+                <div className="absolute top-0 left-0 h-full w-[500px] flex items-center justify-center border-2 border-dashed border-zinc-700 rounded-lg bg-zinc-800/30 text-zinc-400 gap-3 pointer-events-none">
                   Drag videos from Library here
                 </div>
               )}
@@ -786,7 +786,7 @@ export const MovieTab: React.FC = () => {
             {/* Audio Track */}
             {audioTrack && (
               <div className="absolute top-[140px] left-4 h-12 w-full">
-                <div className="absolute -left-14 top-3 text-[10px] font-bold text-zinc-500 w-10 text-right">A1</div>
+                <div className="absolute -left-14 top-3 text-[10px] font-bold text-zinc-400 w-10 text-right">A1</div>
                 <div
                   className="absolute h-full bg-green-900/70 border border-green-500/50 rounded cursor-grab active:cursor-grabbing hover:border-green-400 transition-colors group"
                   style={{ left: `${audioTrack.timelineStart * zoom}px`, width: `${audioTrack.duration * zoom}px` }}

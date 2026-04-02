@@ -11,7 +11,7 @@ const NumInput: React.FC<{
   min?: number; max?: number; step?: number;
 }> = ({ label, value, onChange, min, max, step = 1 }) => (
   <label className="flex items-center gap-2">
-    <span className="text-[10px] text-zinc-500 w-5 text-right shrink-0">{label}</span>
+    <span className="text-[10px] text-zinc-400 w-5 text-right shrink-0">{label}</span>
     <input
       type="number"
       value={Math.round(value * 100) / 100}
@@ -28,7 +28,7 @@ export const BannerProperties: React.FC<BannerPropertiesProps> = ({ composition 
 
   if (!layer) {
     return (
-      <div className="flex items-center justify-center h-full text-zinc-600 text-xs">
+      <div className="flex items-center justify-center h-full text-zinc-400 text-xs">
         Select a layer
       </div>
     );
@@ -47,7 +47,7 @@ export const BannerProperties: React.FC<BannerPropertiesProps> = ({ composition 
       <div className="flex flex-col gap-3 p-3 text-xs">
         {/* Name */}
         <div>
-          <label className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1 block">Name</label>
+          <label className="text-[10px] text-zinc-400 uppercase tracking-wider mb-1 block">Name</label>
           <input
             value={layer.name}
             onChange={e => update({ name: e.target.value })}
@@ -57,7 +57,7 @@ export const BannerProperties: React.FC<BannerPropertiesProps> = ({ composition 
 
         {/* Position */}
         <div>
-          <label className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1 block">Position</label>
+          <label className="text-[10px] text-zinc-400 uppercase tracking-wider mb-1 block">Position</label>
           <div className="grid grid-cols-2 gap-1.5">
             <NumInput label="X" value={layer.x} onChange={v => update({ x: v })} />
             <NumInput label="Y" value={layer.y} onChange={v => update({ y: v })} />
@@ -66,7 +66,7 @@ export const BannerProperties: React.FC<BannerPropertiesProps> = ({ composition 
 
         {/* Scale */}
         <div>
-          <label className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1 block">Scale</label>
+          <label className="text-[10px] text-zinc-400 uppercase tracking-wider mb-1 block">Scale</label>
           <div className="grid grid-cols-2 gap-1.5">
             <NumInput label="W" value={layer.nativeWidth * layer.scaleX} onChange={v => update({ scaleX: v / layer.nativeWidth })} min={1} />
             <NumInput label="H" value={layer.nativeHeight * layer.scaleY} onChange={v => update({ scaleY: v / layer.nativeHeight })} min={1} />
@@ -75,7 +75,7 @@ export const BannerProperties: React.FC<BannerPropertiesProps> = ({ composition 
 
         {/* Rotation */}
         <div>
-          <label className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1 block">Rotation</label>
+          <label className="text-[10px] text-zinc-400 uppercase tracking-wider mb-1 block">Rotation</label>
           <NumInput label="°" value={layer.rotation} onChange={v => update({ rotation: v })} min={-360} max={360} />
         </div>
 
@@ -86,7 +86,7 @@ export const BannerProperties: React.FC<BannerPropertiesProps> = ({ composition 
           <>
             <div className="h-px bg-zinc-800 my-1" />
             <div>
-              <label className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1 block">Text</label>
+              <label className="text-[10px] text-zinc-400 uppercase tracking-wider mb-1 block">Text</label>
               <textarea
                 value={layer.text || ''}
                 onChange={e => update({ text: e.target.value })}
@@ -97,7 +97,7 @@ export const BannerProperties: React.FC<BannerPropertiesProps> = ({ composition 
 
             <div className="grid grid-cols-2 gap-1.5">
               <div>
-                <label className="text-[10px] text-zinc-500 mb-0.5 block">Font</label>
+                <label className="text-[10px] text-zinc-400 mb-0.5 block">Font</label>
                 <select
                   value={layer.fontFamily || 'sans-serif'}
                   onChange={e => update({ fontFamily: e.target.value })}
@@ -116,7 +116,7 @@ export const BannerProperties: React.FC<BannerPropertiesProps> = ({ composition 
 
             <div className="grid grid-cols-2 gap-1.5">
               <div>
-                <label className="text-[10px] text-zinc-500 mb-0.5 block">Color</label>
+                <label className="text-[10px] text-zinc-400 mb-0.5 block">Color</label>
                 <input
                   type="color"
                   value={layer.fontColor || '#ffffff'}
@@ -125,7 +125,7 @@ export const BannerProperties: React.FC<BannerPropertiesProps> = ({ composition 
                 />
               </div>
               <div>
-                <label className="text-[10px] text-zinc-500 mb-0.5 block">Weight</label>
+                <label className="text-[10px] text-zinc-400 mb-0.5 block">Weight</label>
                 <select
                   value={layer.fontWeight || 700}
                   onChange={e => update({ fontWeight: Number(e.target.value) })}
@@ -140,7 +140,7 @@ export const BannerProperties: React.FC<BannerPropertiesProps> = ({ composition 
             </div>
 
             <div>
-              <label className="text-[10px] text-zinc-500 mb-0.5 block">Align</label>
+              <label className="text-[10px] text-zinc-400 mb-0.5 block">Align</label>
               <div className="flex gap-1">
                 {(['left', 'center', 'right'] as const).map(a => (
                   <button
@@ -149,7 +149,7 @@ export const BannerProperties: React.FC<BannerPropertiesProps> = ({ composition 
                     className={`flex-1 py-1 rounded text-[10px] border transition-colors ${
                       (layer.textAlign || 'left') === a
                         ? 'border-cyan-600/40 text-cyan-400 bg-cyan-600/10'
-                        : 'border-zinc-700 text-zinc-500 hover:text-zinc-300'
+                        : 'border-zinc-700 text-zinc-400 hover:text-zinc-300'
                     }`}
                   >
                     <i className={`fa-solid fa-align-${a}`} />

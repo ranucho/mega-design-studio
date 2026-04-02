@@ -113,7 +113,7 @@ const FineTuneConfigPopup: React.FC<{
             <i className="fa-solid fa-wand-magic-sparkles text-amber-400" />
             Fine Tune Settings
           </h3>
-          <p className="text-[10px] text-zinc-500 mt-0.5">
+          <p className="text-[10px] text-zinc-400 mt-0.5">
             {targetLabel} — Check elements to enhance, uncheck to keep exactly as-is
           </p>
         </div>
@@ -145,13 +145,13 @@ const FineTuneConfigPopup: React.FC<{
                   onChange={() => toggleLayer(layer.name)}
                   className="accent-amber-500"
                 />
-                <i className={`fa-solid ${icon} text-xs w-4 text-center ${checked ? 'text-amber-400' : 'text-zinc-600'}`} />
+                <i className={`fa-solid ${icon} text-xs w-4 text-center ${checked ? 'text-amber-400' : 'text-zinc-400'}`} />
                 <div className="flex-1 min-w-0">
                   <span className={`text-xs font-medium ${checked ? 'text-white' : 'text-zinc-400'}`}>{layer.name}</span>
-                  <span className="text-[9px] text-zinc-600 ml-2">{layer.role}</span>
+                  <span className="text-[9px] text-zinc-400 ml-2">{layer.role}</span>
                 </div>
                 {!checked && (
-                  <span className="text-[8px] text-zinc-600 bg-zinc-800 px-1.5 py-0.5 rounded uppercase font-bold">protected</span>
+                  <span className="text-[8px] text-zinc-400 bg-zinc-800 px-1.5 py-0.5 rounded uppercase font-bold">protected</span>
                 )}
               </label>
             );
@@ -160,7 +160,7 @@ const FineTuneConfigPopup: React.FC<{
           {/* Custom instructions */}
           <div className="mt-3 pt-3 border-t border-zinc-800">
             <label className="text-[10px] font-bold text-zinc-400 uppercase block mb-1.5">
-              <i className="fa-solid fa-pen mr-1 text-zinc-500" />
+              <i className="fa-solid fa-pen mr-1 text-zinc-400" />
               Custom Instructions (optional)
             </label>
             <textarea
@@ -174,7 +174,7 @@ const FineTuneConfigPopup: React.FC<{
 
         {/* Footer */}
         <div className="px-5 py-3 border-t border-zinc-800 flex items-center justify-between">
-          <button onClick={onCancel} className="px-3 py-1.5 text-xs text-zinc-500 hover:text-white border border-zinc-700 rounded-lg transition-colors">
+          <button onClick={onCancel} className="px-3 py-1.5 text-xs text-zinc-400 hover:text-white border border-zinc-700 rounded-lg transition-colors">
             Cancel
           </button>
           <button
@@ -338,7 +338,7 @@ export const BannerSparklePanel: React.FC = () => {
             <p className="text-zinc-400 text-sm">
               AI enhances your banners with professional rendering. Choose which enhancements to apply.
               <br />
-              <span className="text-zinc-500 text-xs">Click any banner to see it enlarged.</span>
+              <span className="text-zinc-400 text-xs">Click any banner to see it enlarged.</span>
             </p>
           </div>
 
@@ -350,7 +350,7 @@ export const BannerSparklePanel: React.FC = () => {
               className={`px-6 py-3 text-sm font-medium rounded-xl transition-all shadow-lg flex items-center gap-2 ${
                 !sparklingAll && sparklingId === null
                   ? 'bg-gradient-to-r from-amber-600 to-orange-500 hover:from-amber-500 hover:to-orange-400 text-white shadow-amber-600/20'
-                  : 'bg-zinc-700 text-zinc-500 cursor-not-allowed shadow-none'
+                  : 'bg-zinc-700 text-zinc-400 cursor-not-allowed shadow-none'
               }`}
             >
               {sparklingAll ? (
@@ -406,7 +406,7 @@ export const BannerSparklePanel: React.FC = () => {
                   <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-medium text-zinc-300">{comp.name}</span>
-                      <span className="text-[9px] text-zinc-600">{comp.width}×{comp.height}</span>
+                      <span className="text-[9px] text-zinc-400">{comp.width}×{comp.height}</span>
                     </div>
                     {hasSparkle && (
                       <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-600/20 text-emerald-400 font-medium">
@@ -419,7 +419,7 @@ export const BannerSparklePanel: React.FC = () => {
                     {hasSparkle && beforeUrl ? (
                       <>
                         <div className="flex flex-col items-center gap-1 flex-1 min-w-0">
-                          <span className="text-[9px] text-zinc-600 uppercase">Before</span>
+                          <span className="text-[9px] text-zinc-400 uppercase">Before</span>
                           <img src={beforeUrl} alt="Before" className="w-full rounded border border-zinc-700/30 opacity-70" style={{ maxHeight: 120, objectFit: 'contain' }} />
                         </div>
                         <i className="fa-solid fa-arrow-right text-zinc-700 text-[10px] shrink-0" />
@@ -441,7 +441,7 @@ export const BannerSparklePanel: React.FC = () => {
 
                   <div className="flex items-center justify-end gap-2 px-3 py-2 border-t border-zinc-800">
                     {hasSparkle && (
-                      <button onClick={() => handleClearSparkle(comp.id)} className="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors">
+                      <button onClick={() => handleClearSparkle(comp.id)} className="text-[10px] text-zinc-400 hover:text-zinc-400 transition-colors">
                         <i className="fa-solid fa-trash mr-1" />Clear
                       </button>
                     )}
@@ -451,7 +451,7 @@ export const BannerSparklePanel: React.FC = () => {
                       className={`px-3 py-1.5 text-[10px] font-bold uppercase rounded-lg transition-all flex items-center gap-1 ${
                         !isProcessing && !sparklingAll
                           ? 'bg-amber-600 hover:bg-amber-500 text-white'
-                          : 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
+                          : 'bg-zinc-700 text-zinc-400 cursor-not-allowed'
                       }`}
                     >
                       {isProcessing ? (
@@ -491,12 +491,12 @@ export const BannerSparklePanel: React.FC = () => {
             </button>
             <div className="text-center text-sm text-zinc-400 mb-1">
               <span className="font-medium text-white">{lightboxComp.name}</span>
-              <span className="text-zinc-600 ml-2">{lightboxComp.width}×{lightboxComp.height}</span>
+              <span className="text-zinc-400 ml-2">{lightboxComp.width}×{lightboxComp.height}</span>
             </div>
             {lightboxComp.sparkleDataUrl && beforeImages[lightboxComp.id] ? (
               <div className="flex items-start gap-6 overflow-auto">
                 <div className="flex flex-col items-center gap-2">
-                  <span className="text-xs text-zinc-500 uppercase tracking-wider">Before</span>
+                  <span className="text-xs text-zinc-400 uppercase tracking-wider">Before</span>
                   <img src={beforeImages[lightboxComp.id]} alt="Before" className="rounded-lg border border-zinc-700/50 shadow-2xl" style={{ maxHeight: '70vh', maxWidth: '42vw', objectFit: 'contain' }} />
                 </div>
                 <div className="flex flex-col items-center gap-2">
@@ -506,7 +506,7 @@ export const BannerSparklePanel: React.FC = () => {
               </div>
             ) : (
               <div className="flex flex-col items-center gap-2">
-                <span className="text-xs text-zinc-500 uppercase tracking-wider">Preview</span>
+                <span className="text-xs text-zinc-400 uppercase tracking-wider">Preview</span>
                 <img src={beforeImages[lightboxComp.id] || ''} alt="Preview" className="rounded-lg border border-zinc-700/50 shadow-2xl" style={{ maxHeight: '75vh', maxWidth: '85vw', objectFit: 'contain' }} />
               </div>
             )}

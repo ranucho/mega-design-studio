@@ -95,7 +95,7 @@ export const NotificationSettings: React.FC<NotificationSettingsProps> = ({
                 <i className="fa-solid fa-dice" />
               </button>
             </div>
-            <p className="text-xs text-zinc-500 mt-2">
+            <p className="text-xs text-zinc-400 mt-2">
               Use a unique name to avoid receiving other people's notifications.
             </p>
           </div>

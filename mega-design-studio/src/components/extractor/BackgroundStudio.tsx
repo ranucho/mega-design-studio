@@ -203,13 +203,13 @@ export const BackgroundStudio: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
         {/* LEFT: Source */}
         <div className="flex flex-col gap-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6">
-          <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500">1. Source Image</h3>
+          <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400">1. Source Image</h3>
 
           {/* Upload + Load from Assets buttons */}
           <div className="flex gap-3">
             <label className="flex-1 flex flex-col items-center justify-center h-28 border-2 border-dashed border-zinc-700 rounded-xl hover:border-blue-500 hover:bg-zinc-800/50 transition-all cursor-pointer group">
-              <i className="fas fa-upload text-xl text-zinc-600 group-hover:text-blue-400 mb-1" />
-              <span className="text-[10px] font-bold text-zinc-500 group-hover:text-zinc-300 uppercase">Upload Image</span>
+              <i className="fas fa-upload text-xl text-zinc-400 group-hover:text-blue-400 mb-1" />
+              <span className="text-[10px] font-bold text-zinc-400 group-hover:text-zinc-300 uppercase">Upload Image</span>
               <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
             </label>
             <button
@@ -217,8 +217,8 @@ export const BackgroundStudio: React.FC = () => {
               disabled={labAssets.length === 0}
               className="flex-1 flex flex-col items-center justify-center h-28 border-2 border-dashed border-zinc-700 rounded-xl hover:border-blue-500 hover:bg-zinc-800/50 transition-all disabled:opacity-30 group"
             >
-              <i className="fas fa-flask text-xl text-zinc-600 group-hover:text-blue-400 mb-1" />
-              <span className="text-[10px] font-bold text-zinc-500 group-hover:text-zinc-300 uppercase">Load from Assets</span>
+              <i className="fas fa-flask text-xl text-zinc-400 group-hover:text-blue-400 mb-1" />
+              <span className="text-[10px] font-bold text-zinc-400 group-hover:text-zinc-300 uppercase">Load from Assets</span>
               {labAssets.length > 0 && (
                 <span className="bg-blue-600 text-white px-2 py-0.5 rounded-full text-[9px] mt-1">{labAssets.length}</span>
               )}
@@ -247,7 +247,7 @@ export const BackgroundStudio: React.FC = () => {
                 )}
               </div>
             ) : (
-              <div className="text-zinc-600 flex flex-col items-center pointer-events-none gap-2 text-center p-8">
+              <div className="text-zinc-400 flex flex-col items-center pointer-events-none gap-2 text-center p-8">
                 <i className="fas fa-image text-4xl mb-2" />
                 <span>Upload or load a source image</span>
               </div>
@@ -260,7 +260,7 @@ export const BackgroundStudio: React.FC = () => {
         <div className="flex flex-col gap-6">
           {/* Generation controls */}
           <div className="flex flex-col gap-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6">
-            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500">2. Generate</h3>
+            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400">2. Generate</h3>
             <textarea
               className="w-full bg-black border border-zinc-700 rounded-lg p-3 text-sm text-white focus:border-blue-500 outline-none resize-none h-24"
               placeholder='E.g. "Cyberpunk city street, neon lights, rain, highly detailed"'
@@ -280,7 +280,7 @@ export const BackgroundStudio: React.FC = () => {
 
           {/* Result */}
           <div className="flex flex-col gap-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 flex-1">
-            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500">3. Result</h3>
+            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400">3. Result</h3>
             <div className="flex-1 bg-black rounded-xl border border-zinc-800 relative overflow-hidden flex items-center justify-center min-h-[250px]">
               {generatedImage ? (
                 <img src={generatedImage} className="max-w-full max-h-full object-contain" />
@@ -307,7 +307,7 @@ export const BackgroundStudio: React.FC = () => {
       {/* STEP 4: ANIMATE */}
       {generatedImage && (
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 mb-8 animate-in slide-in-from-bottom-4">
-          <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500 mb-4">4. Animate</h3>
+          <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400 mb-4">4. Animate</h3>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="bg-black rounded-xl border border-zinc-800 overflow-hidden relative">
               <img src={generatedImage} className="w-full h-auto object-contain" />
@@ -323,11 +323,11 @@ export const BackgroundStudio: React.FC = () => {
                 placeholder='E.g. "Camera slowly panning right, clouds moving"'
                 value={videoPrompt} onChange={e => updateState({ videoPrompt: e.target.value })} />
               <div className="flex items-center gap-4">
-                <label className="text-[10px] uppercase font-bold text-zinc-500">Variations:</label>
+                <label className="text-[10px] uppercase font-bold text-zinc-400">Variations:</label>
                 <div className="flex gap-1">
                   {[1, 2, 3, 4].map(n => (
                     <button key={n} onClick={() => updateState({ videoCount: n })}
-                      className={`w-10 h-10 rounded-lg text-sm font-black transition-all ${videoCount === n ? 'bg-blue-600 text-white shadow-lg scale-105' : 'bg-zinc-800 text-zinc-500 hover:text-white hover:bg-zinc-700 border border-zinc-700'}`}>
+                      className={`w-10 h-10 rounded-lg text-sm font-black transition-all ${videoCount === n ? 'bg-blue-600 text-white shadow-lg scale-105' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 border border-zinc-700'}`}>
                       {n}
                     </button>
                   ))}
@@ -347,7 +347,7 @@ export const BackgroundStudio: React.FC = () => {
       {/* VIDEO GALLERY */}
       {generatedVideos.length > 0 && (
         <div className="border-t border-zinc-800 pt-6">
-          <h4 className="text-xs font-bold text-zinc-500 uppercase mb-4">Generated Videos</h4>
+          <h4 className="text-xs font-bold text-zinc-400 uppercase mb-4">Generated Videos</h4>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {generatedVideos.map(vid => (
               <div key={vid.id} className="bg-black rounded-lg overflow-hidden border border-zinc-800 group relative">
@@ -376,11 +376,11 @@ export const BackgroundStudio: React.FC = () => {
               <h3 className="text-lg font-black uppercase tracking-widest text-white flex items-center gap-2">
                 <i className="fas fa-folder-open text-blue-500" /> Load from Assets
               </h3>
-              <button onClick={() => setShowLabPicker(false)} className="text-zinc-500 hover:text-white"><i className="fas fa-times" /></button>
+              <button onClick={() => setShowLabPicker(false)} className="text-zinc-400 hover:text-white"><i className="fas fa-times" /></button>
             </div>
             <div className="flex-1 overflow-y-auto p-6">
               {labAssets.length === 0 ? (
-                <div className="text-center py-12 text-zinc-500">No assets available.</div>
+                <div className="text-center py-12 text-zinc-400">No assets available.</div>
               ) : (
                 <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
                   {labAssets.map(asset => (

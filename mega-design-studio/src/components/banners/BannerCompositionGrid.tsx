@@ -114,7 +114,7 @@ const StripView: React.FC<BannerCompositionGridProps> = ({ onSelect, selectedId 
   const compositions = project.compositions;
   if (compositions.length === 0) {
     return (
-      <div className="flex items-center justify-center py-8 text-zinc-600 text-xs">
+      <div className="flex items-center justify-center py-8 text-zinc-400 text-xs">
         No compositions generated yet
       </div>
     );
@@ -166,7 +166,7 @@ const StripView: React.FC<BannerCompositionGridProps> = ({ onSelect, selectedId 
               )}
               <div className="flex items-center gap-1">
                 <div className={`w-1.5 h-1.5 rounded-full ${STATUS_COLORS[comp.status]}`} />
-                <span className="text-[9px] text-zinc-500">{comp.width}x{comp.height}</span>
+                <span className="text-[9px] text-zinc-400">{comp.width}x{comp.height}</span>
               </div>
             </button>
           );
@@ -206,7 +206,7 @@ const GalleryView: React.FC<BannerCompositionGridProps> = ({ onSelect }) => {
       {/* Toolbar */}
       <div className="shrink-0 flex items-center gap-4 px-4 py-2 bg-zinc-900/60 border-b border-zinc-800">
         <div className="flex items-center gap-2 text-xs text-zinc-400">
-          <i className="fa-solid fa-grid-2 text-zinc-500" />
+          <i className="fa-solid fa-grid-2 text-zinc-400" />
           <span className="font-medium text-zinc-300">{compositions.length} Banners</span>
           {generatingCount > 0 && (
             <span className="text-yellow-400 flex items-center gap-1">
@@ -223,7 +223,7 @@ const GalleryView: React.FC<BannerCompositionGridProps> = ({ onSelect }) => {
 
         {/* Zoom slider */}
         <div className="flex items-center gap-2">
-          <i className="fa-solid fa-image text-zinc-600 text-[10px]" />
+          <i className="fa-solid fa-image text-zinc-400 text-[10px]" />
           <input
             type="range"
             min={10}
@@ -240,7 +240,7 @@ const GalleryView: React.FC<BannerCompositionGridProps> = ({ onSelect }) => {
       {/* Gallery grid — Adobe Bridge style: show full images at natural aspect ratio */}
       <div className="flex-1 overflow-auto p-4">
         {compositions.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-zinc-600 text-sm">
+          <div className="flex items-center justify-center h-full text-zinc-400 text-sm">
             No compositions generated yet
           </div>
         ) : (
@@ -290,7 +290,7 @@ const GalleryView: React.FC<BannerCompositionGridProps> = ({ onSelect }) => {
                   <div className="px-2 py-1.5 flex items-center gap-1.5 min-w-0">
                     <div className={`w-2 h-2 rounded-full shrink-0 ${STATUS_COLORS[comp.status]}`} />
                     <span className="text-[10px] text-zinc-400 font-medium truncate">{comp.width}×{comp.height}</span>
-                    <span className="text-[9px] text-zinc-600 truncate ml-auto">{STATUS_LABELS[comp.status] || comp.status}</span>
+                    <span className="text-[9px] text-zinc-400 truncate ml-auto">{STATUS_LABELS[comp.status] || comp.status}</span>
                   </div>
                 </button>
               );

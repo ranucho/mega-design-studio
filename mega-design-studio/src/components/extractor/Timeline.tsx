@@ -120,7 +120,7 @@ const Timeline: React.FC<TimelineProps> = ({
         <div className="h-6 w-full bg-zinc-800/50 border-b border-zinc-700 relative cursor-pointer hover:bg-zinc-800 transition-colors" onMouseDown={(e) => handleMouseDown(e, 'scrub')}>
           {ticks.map((t, i) => (
             <div key={i} className="absolute bottom-0 h-2 w-px bg-zinc-500" style={{ left: `${(t / duration) * 100}%` }}>
-              <span className="absolute -top-4 -left-3 text-[9px] text-zinc-500 font-mono">{formatTime(t)}</span>
+              <span className="absolute -top-4 -left-3 text-[9px] text-zinc-400 font-mono">{formatTime(t)}</span>
             </div>
           ))}
           {keyframes?.map((t, i) => (

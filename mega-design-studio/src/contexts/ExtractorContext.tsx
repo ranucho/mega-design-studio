@@ -137,11 +137,17 @@ const DEFAULT_SYMBOL_GEN_STATE: SymbolGeneratorState = {
   selectedStartFrameId: null,
   selectedEndFrameId: null,
   animationPrompt: 'Slot machine reels spinning with motion blur and then stopping',
+  animationPrompts: ['Slot machine reels spinning with motion blur and then stopping'],
+  animationVideoCount: 1,
   generatedVideos: [],
   isGeneratingVideo: false,
   prompt: '',
   isProcessing: false,
   activeSubTab: 'master',
+  sourceFrames: [],
+  activeSourceFrameId: null,
+  layouts: [],
+  activeLayoutId: null,
 };
 
 const DEFAULT_COMPOSITOR_STATE: CompositorState = {

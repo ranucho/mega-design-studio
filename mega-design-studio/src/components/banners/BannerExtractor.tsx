@@ -127,8 +127,8 @@ const RecropModal: React.FC<RecropModalProps> = ({ sourceImage, element, onApply
             Recrop: {element.label}
           </h3>
           <div className="flex items-center gap-3">
-            <span className="text-[10px] text-zinc-500">Drag to move • Handles to resize</span>
-            <button onClick={onClose} className="text-zinc-500 hover:text-white transition-colors">
+            <span className="text-[10px] text-zinc-400">Drag to move • Handles to resize</span>
+            <button onClick={onClose} className="text-zinc-400 hover:text-white transition-colors">
               <i className="fa-solid fa-xmark" />
             </button>
           </div>
@@ -193,7 +193,7 @@ const RecropModal: React.FC<RecropModalProps> = ({ sourceImage, element, onApply
 
         {/* Info + Actions */}
         <div className="flex items-center justify-between">
-          <div className="text-[10px] text-zinc-500 font-mono">
+          <div className="text-[10px] text-zinc-400 font-mono">
             x:{bbox.x.toFixed(1)}% y:{bbox.y.toFixed(1)}% w:{bbox.w.toFixed(1)}% h:{bbox.h.toFixed(1)}%
           </div>
           <div className="flex gap-2">
@@ -1025,7 +1025,7 @@ Output: A clean, full-body character on pure white background.`;
                         <div className="flex items-center gap-1.5 mb-1.5">
                           <i className={`fa-solid ${catMeta.icon} text-[10px]`} style={{ color: catMeta.color }} />
                           <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: catMeta.color }}>{catMeta.label}</span>
-                          <span className="text-[9px] text-zinc-500 ml-auto">{catElements.length}</span>
+                          <span className="text-[9px] text-zinc-400 ml-auto">{catElements.length}</span>
                         </div>
                         <div className="flex flex-col gap-1.5">
                   {catElements.map(({ el, i }) => {
@@ -1090,7 +1090,7 @@ Output: A clean, full-body character on pure white background.`;
                 {/* Re-analyze */}
                 {!isExtracting && !isAnalyzing && (
                   <button onClick={() => { hasStarted.current = false; runAnalysis(); }}
-                    className="px-3 py-1.5 text-xs text-zinc-500 hover:text-zinc-300 border border-zinc-700 rounded-lg transition-colors">
+                    className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-300 border border-zinc-700 rounded-lg transition-colors">
                     <i className="fa-solid fa-rotate mr-1" />Re-analyze
                   </button>
                 )}
@@ -1102,7 +1102,7 @@ Output: A clean, full-body character on pure white background.`;
                     className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 ${
                       isDrawingMode
                         ? 'bg-cyan-600 text-white'
-                        : 'text-zinc-500 hover:text-zinc-300 border border-zinc-700'
+                        : 'text-zinc-400 hover:text-zinc-300 border border-zinc-700'
                     }`}
                   >
                     <i className={`fa-solid ${isDrawingMode ? 'fa-times' : 'fa-plus'}`} />
@@ -1157,7 +1157,7 @@ Output: A clean, full-body character on pure white background.`;
               </button>
               <button
                 onClick={() => setNewElementForm(null)}
-                className="px-2 py-1.5 text-zinc-500 hover:text-zinc-300 text-xs transition-colors"
+                className="px-2 py-1.5 text-zinc-400 hover:text-zinc-300 text-xs transition-colors"
               >
                 Cancel
               </button>
@@ -1304,9 +1304,9 @@ Output: A clean, full-body character on pure white background.`;
                             >{el.label}</span>
                           )}
                         </div>
-                        <div className="text-[9px] text-zinc-600 mt-0.5">
+                        <div className="text-[9px] text-zinc-400 mt-0.5">
                           {el.nativeWidth} x {el.nativeHeight}
-                          {el.detectedText && <span className="ml-2 text-zinc-500">"{el.detectedText}"</span>}
+                          {el.detectedText && <span className="ml-2 text-zinc-400">"{el.detectedText}"</span>}
                         </div>
                       </div>
                     </div>
@@ -1328,7 +1328,7 @@ Output: A clean, full-body character on pure white background.`;
                     Edit: {editingElement.label}
                   </h3>
                   <button onClick={() => { setEditingElement(null); setEditPrompt(''); }}
-                    className="text-zinc-500 hover:text-white transition-colors">
+                    className="text-zinc-400 hover:text-white transition-colors">
                     <i className="fa-solid fa-xmark" />
                   </button>
                 </div>
@@ -1343,10 +1343,10 @@ Output: A clean, full-body character on pure white background.`;
                       onChange={e => setEditPrompt(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && handleEditElement()}
                       placeholder="Describe changes (e.g., 'remove shadow', 'make text red')"
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-cyan-600"
+                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-400 focus:outline-none focus:border-cyan-600"
                       autoFocus
                     />
-                    <p className="text-[10px] text-zinc-600">Uses AI to modify the extracted element</p>
+                    <p className="text-[10px] text-zinc-400">Uses AI to modify the extracted element</p>
                   </div>
                 </div>
                 <div className="flex justify-end gap-2">
@@ -1432,7 +1432,7 @@ Output: A clean, full-body character on pure white background.`;
             </div>
             <div className="flex items-center gap-3 text-zinc-300">
               <span className="text-sm font-bold">{previewElement.label}</span>
-              <span className="text-xs text-zinc-500">{previewElement.nativeWidth} × {previewElement.nativeHeight}</span>
+              <span className="text-xs text-zinc-400">{previewElement.nativeWidth} × {previewElement.nativeHeight}</span>
               <span className="text-[10px] px-2 py-0.5 rounded uppercase font-bold" style={{ backgroundColor: ROLE_COLORS[previewElement.role], color: 'white' }}>
                 {previewElement.role}
               </span>

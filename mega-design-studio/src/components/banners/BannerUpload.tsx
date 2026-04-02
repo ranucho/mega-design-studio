@@ -83,7 +83,7 @@ export const BannerUpload: React.FC = () => {
               </button>
               <div className="flex items-start gap-6 overflow-auto">
                 <div className="flex flex-col items-center gap-2">
-                  <span className="text-xs text-zinc-500 uppercase tracking-wider">Before (Original)</span>
+                  <span className="text-xs text-zinc-400 uppercase tracking-wider">Before (Original)</span>
                   <img src={project.originalImage} alt="Original" className="rounded-lg border border-zinc-700/50 shadow-2xl"
                     style={{ maxHeight: '70vh', maxWidth: '42vw', objectFit: 'contain' }} />
                 </div>
@@ -183,14 +183,14 @@ export const BannerUpload: React.FC = () => {
           dragOver ? 'bg-cyan-500/20' : 'bg-zinc-800'
         }`}>
           <i className={`fa-solid fa-cloud-arrow-up text-2xl ${
-            dragOver ? 'text-cyan-400' : 'text-zinc-500'
+            dragOver ? 'text-cyan-400' : 'text-zinc-400'
           }`} />
         </div>
         <div className="text-center">
           <p className="text-sm text-zinc-300">
             Drop a banner image here or <span className="text-cyan-400 underline underline-offset-2">browse</span>
           </p>
-          <p className="text-xs text-zinc-500 mt-1">PNG, JPG, WebP</p>
+          <p className="text-xs text-zinc-400 mt-1">PNG, JPG, WebP</p>
         </div>
       </div>
 

@@ -213,9 +213,9 @@ const SkinSelectorUI: React.FC<SkinSelectorUIProps> = ({
           </span>
           {/* Only show count when no skin is selected */}
           {!activeSkin && (
-            <span className={`text-xs font-semibold ${skins.length > 0 ? 'text-indigo-400' : 'text-zinc-500'}`}>({skins.length})</span>
+            <span className={`text-xs font-semibold ${skins.length > 0 ? 'text-indigo-400' : 'text-zinc-400'}`}>({skins.length})</span>
           )}
-          <i className={`fa-solid fa-chevron-down text-xs text-zinc-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          <i className={`fa-solid fa-chevron-down text-xs text-zinc-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </button>
 
         {/* Save / Update buttons */}
@@ -245,7 +245,7 @@ const SkinSelectorUI: React.FC<SkinSelectorUIProps> = ({
                 </button>
                 <button
                   onClick={() => { setIsNaming(false); setSkinName(''); }}
-                  className="text-xs text-zinc-500 hover:text-zinc-300 px-1"
+                  className="text-xs text-zinc-400 hover:text-zinc-300 px-1"
                 >
                   <i className="fa-solid fa-xmark" />
                 </button>
@@ -261,7 +261,7 @@ const SkinSelectorUI: React.FC<SkinSelectorUIProps> = ({
                     }}
                     disabled={isUpdating || justUpdated}
                     className={`flex items-center gap-1 text-xs transition-colors whitespace-nowrap disabled:opacity-50 ${
-                      justUpdated ? 'text-zinc-500' : 'text-indigo-400 hover:text-indigo-300'
+                      justUpdated ? 'text-zinc-400' : 'text-indigo-400 hover:text-indigo-300'
                     }`}
                     title={justUpdated ? 'Skin is up to date' : `Update "${activeSkin.name}" with current state`}
                   >
@@ -287,7 +287,7 @@ const SkinSelectorUI: React.FC<SkinSelectorUIProps> = ({
       {isOpen && skins.length > 0 && (
         <div className="absolute top-full right-0 mt-1 z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl overflow-hidden min-w-[280px] max-w-[380px]">
           <div className="p-2 border-b border-zinc-800">
-            <span className="text-xs text-zinc-500 font-medium uppercase tracking-wide">
+            <span className="text-xs text-zinc-400 font-medium uppercase tracking-wide">
               {label}
             </span>
           </div>
@@ -306,7 +306,7 @@ const SkinSelectorUI: React.FC<SkinSelectorUIProps> = ({
                   <img src={skin.thumbnailUrl} alt="" className="w-14 h-14 rounded-lg object-cover flex-shrink-0 border border-zinc-700" />
                 ) : (
                   <div className="w-14 h-14 rounded-lg bg-zinc-800 flex items-center justify-center flex-shrink-0">
-                    <i className="fa-solid fa-image text-zinc-600" />
+                    <i className="fa-solid fa-image text-zinc-400" />
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
@@ -327,7 +327,7 @@ const SkinSelectorUI: React.FC<SkinSelectorUIProps> = ({
                   ) : (
                     <div className="text-sm text-white truncate">{skin.name}</div>
                   )}
-                  <div className="text-xs text-zinc-500">
+                  <div className="text-xs text-zinc-400">
                     {new Date(skin.createdAt).toLocaleDateString()}
                     {skin.isUploaded && <i className="fa-solid fa-cloud text-emerald-500 ml-1.5" title="Synced to cloud" />}
                   </div>
@@ -338,7 +338,7 @@ const SkinSelectorUI: React.FC<SkinSelectorUIProps> = ({
                 {/* Rename button */}
                 <button
                   onClick={(e) => { e.stopPropagation(); setRenamingId(skin.id); setRenameValue(skin.name); }}
-                  className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-zinc-300 transition-all p-1"
+                  className="opacity-0 group-hover:opacity-100 text-zinc-400 hover:text-zinc-300 transition-all p-1"
                   title="Rename"
                 >
                   <i className="fa-solid fa-pen text-xs" />
@@ -346,7 +346,7 @@ const SkinSelectorUI: React.FC<SkinSelectorUIProps> = ({
                 {/* Delete button */}
                 <button
                   onClick={(e) => handleDelete(e, skin.id)}
-                  className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400 transition-all p-1"
+                  className="opacity-0 group-hover:opacity-100 text-zinc-400 hover:text-red-400 transition-all p-1"
                   title="Delete skin"
                 >
                   <i className="fa-solid fa-trash-can text-xs" />

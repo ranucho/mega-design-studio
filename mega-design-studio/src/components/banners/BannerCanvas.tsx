@@ -353,10 +353,10 @@ export const BannerCanvas: React.FC<BannerCanvasProps> = ({ composition }) => {
     <div className="flex flex-col h-full">
       {/* Toolbar */}
       <div className="shrink-0 flex items-center gap-2 px-3 py-2 bg-zinc-900/60 border-b border-zinc-800">
-        <button onClick={undo} title="Undo (Ctrl+Z)" className="p-1.5 text-zinc-500 hover:text-white rounded transition-colors">
+        <button onClick={undo} title="Undo (Ctrl+Z)" className="p-1.5 text-zinc-400 hover:text-white rounded transition-colors">
           <i className="fa-solid fa-rotate-left text-xs" />
         </button>
-        <button onClick={redo} title="Redo (Ctrl+Shift+Z)" className="p-1.5 text-zinc-500 hover:text-white rounded transition-colors">
+        <button onClick={redo} title="Redo (Ctrl+Shift+Z)" className="p-1.5 text-zinc-400 hover:text-white rounded transition-colors">
           <i className="fa-solid fa-rotate-right text-xs" />
         </button>
         <div className="w-px h-4 bg-zinc-700 mx-1" />
@@ -369,15 +369,15 @@ export const BannerCanvas: React.FC<BannerCanvasProps> = ({ composition }) => {
               { icon: 'fa-align-right', title: 'Align Right', fn: () => { pushUndo(); updateLayer(composition.id, selectedLayer.id, { x: composition.width - selectedLayer.nativeWidth * selectedLayer.scaleX }); } },
               { icon: 'fa-arrows-up-down', title: 'Center V', fn: () => { pushUndo(); updateLayer(composition.id, selectedLayer.id, { y: (composition.height - selectedLayer.nativeHeight * selectedLayer.scaleY) / 2 }); } },
             ].map(btn => (
-              <button key={btn.icon} onClick={btn.fn} title={btn.title} className="p-1.5 text-zinc-500 hover:text-white rounded transition-colors">
+              <button key={btn.icon} onClick={btn.fn} title={btn.title} className="p-1.5 text-zinc-400 hover:text-white rounded transition-colors">
                 <i className={`fa-solid ${btn.icon} text-xs`} />
               </button>
             ))}
             <div className="w-px h-4 bg-zinc-700 mx-1" />
-            <button onClick={() => { pushUndo(); updateLayer(composition.id, selectedLayer.id, { flipX: !selectedLayer.flipX }); }} title="Flip H" className="p-1.5 text-zinc-500 hover:text-white rounded transition-colors">
+            <button onClick={() => { pushUndo(); updateLayer(composition.id, selectedLayer.id, { flipX: !selectedLayer.flipX }); }} title="Flip H" className="p-1.5 text-zinc-400 hover:text-white rounded transition-colors">
               <i className="fa-solid fa-left-right text-xs" />
             </button>
-            <button onClick={() => { pushUndo(); updateLayer(composition.id, selectedLayer.id, { flipY: !selectedLayer.flipY }); }} title="Flip V" className="p-1.5 text-zinc-500 hover:text-white rounded transition-colors">
+            <button onClick={() => { pushUndo(); updateLayer(composition.id, selectedLayer.id, { flipY: !selectedLayer.flipY }); }} title="Flip V" className="p-1.5 text-zinc-400 hover:text-white rounded transition-colors">
               <i className="fa-solid fa-up-down text-xs" />
             </button>
           </>
@@ -386,11 +386,11 @@ export const BannerCanvas: React.FC<BannerCanvasProps> = ({ composition }) => {
         <div className="flex-1" />
         <button
           onClick={() => setShowSafeZone(v => !v)}
-          className={`px-2 py-1 text-[10px] rounded border transition-colors ${showSafeZone ? 'border-yellow-600/40 text-yellow-400 bg-yellow-600/10' : 'border-zinc-700 text-zinc-500 hover:text-zinc-300'}`}
+          className={`px-2 py-1 text-[10px] rounded border transition-colors ${showSafeZone ? 'border-yellow-600/40 text-yellow-400 bg-yellow-600/10' : 'border-zinc-700 text-zinc-400 hover:text-zinc-300'}`}
         >
           Safe Zone
         </button>
-        <span className="text-[10px] text-zinc-600">{composition.width}x{composition.height}</span>
+        <span className="text-[10px] text-zinc-400">{composition.width}x{composition.height}</span>
       </div>
 
       {/* Canvas area — relative container so DOM selection overlay can extend outside */}

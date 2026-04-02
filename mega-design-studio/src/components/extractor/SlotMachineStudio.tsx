@@ -175,11 +175,11 @@ export const SlotMachineStudio: React.FC = () => {
         {/* LEFT: CROPPER */}
         <div className="flex flex-col gap-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 h-fit">
           <div className="flex justify-between items-center">
-            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500">1. Define Grid</h3>
+            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400">1. Define Grid</h3>
             <div className="flex gap-2 items-center">
-              <label className="text-[10px] uppercase font-bold text-zinc-500">Rows</label>
+              <label className="text-[10px] uppercase font-bold text-zinc-400">Rows</label>
               <input type="number" value={rows} onChange={e => updateState({ rows: Number(e.target.value) })} className="w-12 bg-black border border-zinc-700 rounded px-2 py-1 text-xs text-white" min={1} />
-              <label className="text-[10px] uppercase font-bold text-zinc-500">Cols</label>
+              <label className="text-[10px] uppercase font-bold text-zinc-400">Cols</label>
               <input type="number" value={cols} onChange={e => updateState({ cols: Number(e.target.value) })} className="w-12 bg-black border border-zinc-700 rounded px-2 py-1 text-xs text-white" min={1} />
             </div>
           </div>
@@ -215,7 +215,7 @@ export const SlotMachineStudio: React.FC = () => {
                 )}
               </div>
             ) : (
-              <div className="text-zinc-600 flex flex-col items-center pointer-events-none">
+              <div className="text-zinc-400 flex flex-col items-center pointer-events-none">
                 <i className="fas fa-border-all text-4xl mb-2" />
                 <span>Load a slot grid image</span>
               </div>
@@ -223,7 +223,7 @@ export const SlotMachineStudio: React.FC = () => {
           </div>
 
           <div className="flex flex-col gap-2">
-            <label className="text-[10px] uppercase font-bold text-zinc-500">Reskin Style</label>
+            <label className="text-[10px] uppercase font-bold text-zinc-400">Reskin Style</label>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -247,7 +247,7 @@ export const SlotMachineStudio: React.FC = () => {
         <div className="flex flex-col gap-6">
           {/* Symbol Sheet */}
           <div className="flex flex-col gap-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6">
-            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500 flex justify-between items-center">
+            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400 flex justify-between items-center">
               <span>2a. Symbol Sheet</span>
               {isProcessing && <span className="text-amber-500 animate-pulse">Generating...</span>}
             </h3>
@@ -270,7 +270,7 @@ export const SlotMachineStudio: React.FC = () => {
 
           {/* Frame Result */}
           <div className="flex flex-col gap-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6">
-            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500 flex justify-between items-center">
+            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400 flex justify-between items-center">
               <span>2b. Reel Frame & UI</span>
               {isProcessing && <span className="text-amber-500 animate-pulse">Generating...</span>}
             </h3>

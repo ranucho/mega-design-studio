@@ -348,7 +348,7 @@ export const EditorTab: React.FC = () => {
 
   if (clips.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-zinc-500">
+      <div className="flex flex-col items-center justify-center h-full text-zinc-400">
         <i className="fas fa-film text-4xl mb-4" />
         <p>No generated clips found. Create segments in Studio first.</p>
       </div>
@@ -374,7 +374,7 @@ export const EditorTab: React.FC = () => {
           >
             Cancel Export
           </button>
-          <p className="text-zinc-600 text-[10px] mt-8 max-w-xs text-center">
+          <p className="text-zinc-400 text-[10px] mt-8 max-w-xs text-center">
             Recording viewport playback... Do not minimize window.
           </p>
         </div>
@@ -386,7 +386,7 @@ export const EditorTab: React.FC = () => {
         <div className="w-64 bg-[#09090b] border-r border-zinc-800 flex flex-col shrink-0">
           <div className="p-4 border-b border-zinc-800 bg-zinc-900/50">
             <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400">Media Library</h3>
-            <p className="text-[10px] text-zinc-500 mt-1">{timelineClips.length} on timeline · {clips.length} total</p>
+            <p className="text-[10px] text-zinc-400 mt-1">{timelineClips.length} on timeline · {clips.length} total</p>
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
             {/* Timeline clips */}
@@ -404,12 +404,12 @@ export const EditorTab: React.FC = () => {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-bold text-zinc-300 truncate">Clip #{clip.index}</div>
-                  <div className="text-[10px] text-zinc-500 font-mono">{(clip.trimEnd - clip.trimStart).toFixed(1)}s</div>
+                  <div className="text-[10px] text-zinc-400 font-mono">{(clip.trimEnd - clip.trimStart).toFixed(1)}s</div>
                 </div>
                 <button
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={(e) => { e.stopPropagation(); onRemoveFromTimeline(clip.id); }}
-                  className="opacity-0 group-hover:opacity-100 p-2 hover:bg-orange-500/20 hover:text-orange-400 rounded text-zinc-500 transition-all z-10 cursor-pointer pointer-events-auto"
+                  className="opacity-0 group-hover:opacity-100 p-2 hover:bg-orange-500/20 hover:text-orange-400 rounded text-zinc-400 transition-all z-10 cursor-pointer pointer-events-auto"
                   title="Remove from timeline"
                 >
                   <i className="fas fa-minus-circle text-xs pointer-events-none" />
@@ -421,7 +421,7 @@ export const EditorTab: React.FC = () => {
             {libraryOnlyClips.length > 0 && (
               <>
                 <div className="pt-3 pb-1 px-1">
-                  <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-600">Removed</span>
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">Removed</span>
                 </div>
                 {libraryOnlyClips.map((clip) => (
                   <div
@@ -435,20 +435,20 @@ export const EditorTab: React.FC = () => {
                       <div className="absolute inset-0 bg-black/40" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="text-xs font-bold text-zinc-500 truncate">Clip #{clip.index}</div>
-                      <div className="text-[10px] text-zinc-600 font-mono">{(clip.trimEnd - clip.trimStart).toFixed(1)}s</div>
+                      <div className="text-xs font-bold text-zinc-400 truncate">Clip #{clip.index}</div>
+                      <div className="text-[10px] text-zinc-400 font-mono">{(clip.trimEnd - clip.trimStart).toFixed(1)}s</div>
                     </div>
                     <div className="flex gap-1">
                       <button
                         onClick={(e) => { e.stopPropagation(); onRestoreToTimeline(clip.id); }}
-                        className="opacity-0 group-hover:opacity-100 p-2 hover:bg-green-500/20 hover:text-green-400 rounded text-zinc-500 transition-all cursor-pointer"
+                        className="opacity-0 group-hover:opacity-100 p-2 hover:bg-green-500/20 hover:text-green-400 rounded text-zinc-400 transition-all cursor-pointer"
                         title="Add back to timeline"
                       >
                         <i className="fas fa-plus-circle text-xs" />
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); onDeleteClip(clip.id); }}
-                        className="opacity-0 group-hover:opacity-100 p-2 hover:bg-red-500/20 hover:text-red-500 rounded text-zinc-500 transition-all cursor-pointer"
+                        className="opacity-0 group-hover:opacity-100 p-2 hover:bg-red-500/20 hover:text-red-500 rounded text-zinc-400 transition-all cursor-pointer"
                         title="Delete permanently"
                       >
                         <i className="fas fa-trash text-xs" />
@@ -476,7 +476,7 @@ export const EditorTab: React.FC = () => {
                   muted={false}
                 />
               ) : (
-                <div className="flex items-center justify-center h-full text-zinc-600">No Clip Selected</div>
+                <div className="flex items-center justify-center h-full text-zinc-400">No Clip Selected</div>
               )}
               {!isPlaying && activeClip && !isExporting && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
@@ -499,10 +499,10 @@ export const EditorTab: React.FC = () => {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-[10px] font-bold text-zinc-500 uppercase mr-4">Rate: {activeClip?.speed || 1}x</span>
+              <span className="text-[10px] font-bold text-zinc-400 uppercase mr-4">Rate: {activeClip?.speed || 1}x</span>
               <button
                 onClick={handleExportSequence} disabled={isExporting}
-                className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-white px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest shadow-lg flex items-center gap-2"
+                className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-400 text-white px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest shadow-lg flex items-center gap-2"
               >
                 <i className="fas fa-film" /> Export Sequence
               </button>
@@ -520,7 +520,7 @@ export const EditorTab: React.FC = () => {
               <>
                 {/* Trim Controls */}
                 <div>
-                  <label className="text-[10px] uppercase font-bold text-zinc-500 mb-2 block flex justify-between">
+                  <label className="text-[10px] uppercase font-bold text-zinc-400 mb-2 block flex justify-between">
                     <span>Range</span>
                     <span className="text-indigo-400">{(activeClip.trimEnd - activeClip.trimStart).toFixed(1)}s</span>
                   </label>
@@ -536,13 +536,13 @@ export const EditorTab: React.FC = () => {
 
                 {/* Speed Controls */}
                 <div>
-                  <label className="text-[10px] uppercase font-bold text-zinc-500 mb-2 block">Playback Speed</label>
+                  <label className="text-[10px] uppercase font-bold text-zinc-400 mb-2 block">Playback Speed</label>
                   <div className="grid grid-cols-5 gap-1 bg-zinc-900 p-1 rounded-lg border border-zinc-800">
                     {[0.5, 1, 1.5, 2, 4].map(speed => (
                       <button
                         key={speed}
                         onClick={() => { if (!isExporting) onUpdateClip(activeClip.id, { speed }); }}
-                        className={`py-2 text-[9px] font-bold rounded ${activeClip.speed === speed ? 'bg-indigo-600 text-white' : 'text-zinc-500 hover:bg-zinc-800'}`}
+                        className={`py-2 text-[9px] font-bold rounded ${activeClip.speed === speed ? 'bg-indigo-600 text-white' : 'text-zinc-400 hover:bg-zinc-800'}`}
                         disabled={isExporting}
                       >
                         {speed}x
@@ -554,17 +554,17 @@ export const EditorTab: React.FC = () => {
                 {/* Clip Info */}
                 <div className="p-3 rounded bg-zinc-900 border border-zinc-800 text-[10px] space-y-1">
                   <div className="flex justify-between">
-                    <span className="text-zinc-500">Source ID</span>
+                    <span className="text-zinc-400">Source ID</span>
                     <span className="text-zinc-300 font-mono truncate w-24 text-right" title={activeClip.id}>{activeClip.id.substring(0, 8)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-zinc-500">Full Duration</span>
+                    <span className="text-zinc-400">Full Duration</span>
                     <span className="text-zinc-300 font-mono">{(activeClip.originalDuration || 0).toFixed(2)}s</span>
                   </div>
                 </div>
               </>
             ) : (
-              <div className="text-center text-zinc-600 text-xs py-10">Select a clip to edit</div>
+              <div className="text-center text-zinc-400 text-xs py-10">Select a clip to edit</div>
             )}
           </div>
         </div>

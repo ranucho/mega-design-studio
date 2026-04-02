@@ -48,7 +48,7 @@ export const ToolkitTab: React.FC = () => {
       <div className="flex-1 overflow-hidden">
         <div className={`h-full ${activeSubTab === 'slots' ? '' : 'hidden'}`}><SlotMachineStudio /></div>
         <div className={`h-full ${activeSubTab === 'character' ? '' : 'hidden'}`}><CharacterStudio /></div>
-        <div className={`h-full ${activeSubTab === 'symbol-gen' ? '' : 'hidden'}`}><SymbolGenerator /></div>
+        <div className={`h-full ${activeSubTab === 'symbol-gen' ? '' : 'hidden'}`}><SymbolGenerator isVisible={activeSubTab === 'symbol-gen'} /></div>
         <div className={`h-full ${activeSubTab === 'background' ? '' : 'hidden'}`}><BackgroundStudio /></div>
         <div className={`h-full ${activeSubTab === 'compositor' ? '' : 'hidden'}`}><Compositor /></div>
       </div>

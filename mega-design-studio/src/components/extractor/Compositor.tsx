@@ -84,12 +84,14 @@ function applyChromaKey(
   return imageData;
 }
 
+// ---- Layer color palette ----
+const LAYER_COLORS = ['#7c3aed','#2563eb','#0891b2','#059669','#d97706','#dc2626','#db2777','#64748b'];
+
 // ---- Resolution presets ----
 const RESOLUTION_PRESETS = [
-  { label: '1080p (16:9)', w: 1920, h: 1080 },
-  { label: '720p (16:9)', w: 1280, h: 720 },
-  { label: '1080×1920 (9:16)', w: 1080, h: 1920 },
-  { label: '1080×1080 (1:1)', w: 1080, h: 1080 },
+  { label: '16:9', w: 1920, h: 1080 },
+  { label: '9:16', w: 1080, h: 1920 },
+  { label: '1:1', w: 1080, h: 1080 },
 ];
 
 export const Compositor: React.FC = () => {
@@ -104,6 +106,14 @@ export const Compositor: React.FC = () => {
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
   const animFrameRef = useRef<number>(0);
   const [showAssetPicker, setShowAssetPicker] = useState(false);
+  const [renamingLayerId, setRenamingLayerId] = useState<string | null>(null);
+  const [colorPickerLayerId, setColorPickerLayerId] = useState<string | null>(null);
+  const [listDragId, setListDragId] = useState<string | null>(null);
+  const [listGhostPos, setListGhostPos] = useState<{ x: number; y: number } | null>(null);
+  const listDragStartYRef = useRef(0);
+  const listDragMovedRef = useRef(false);
+  // Ref to moveLayer to avoid stale closures in drag useEffect
+  const moveLayerRef = useRef<(id: string, dir: 'up' | 'down') => void>(() => {});
   const [dragState, setDragState] = useState<{
     layerId: string; startX: number; startY: number; startLX: number; startLY: number;
     mode: 'move' | 'scale';
@@ -112,6 +122,16 @@ export const Compositor: React.FC = () => {
   // Master clock refs
   const playbackStartRef = useRef<number>(0);         // performance.now() when play started
   const playbackStartTimeRef = useRef<number>(0);      // playheadTime when play started
+
+  // Resizable timeline
+  const [timelineHeight, setTimelineHeight] = useState(200);
+  const splitterDragRef = useRef<{ startY: number; startH: number } | null>(null);
+
+  // Keyboard shortcut refs (avoid stale closure)
+  const isPlayingRef = useRef(isPlaying);
+  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+  const playheadTimeRef = useRef(playheadTime);
+  useEffect(() => { playheadTimeRef.current = playheadTime; }, [playheadTime]);
 
   const updateState = useCallback((updates: Partial<typeof compositorState>) => {
     setCompositorState(prev => ({ ...prev, ...updates }));
@@ -137,14 +157,23 @@ export const Compositor: React.FC = () => {
   /** Get the duration a layer occupies on the timeline */
   const getLayerTimelineDuration = useCallback((layer: CompositorLayer): number => {
     if (layer.loop) return layer.loopDuration;
-    return (layer.trimOut - layer.trimIn) / layer.playbackRate;
+    const base = (layer.trimOut - layer.trimIn) / layer.playbackRate;
+    if (layer.freezeLastFrame) return base + (layer.freezeDuration ?? 2);
+    return base;
   }, []);
 
   /** Given a composition time, compute the source media time for a layer and whether it's visible */
   const getLayerMediaTime = useCallback((layer: CompositorLayer, compTime: number): { visible: boolean; mediaTime: number } => {
     const layerDur = getLayerTimelineDuration(layer);
     const relTime = compTime - layer.timelineStart;
-    if (relTime < 0 || relTime >= layerDur) return { visible: false, mediaTime: 0 };
+    if (relTime < 0) return { visible: false, mediaTime: 0 };
+    if (relTime >= layerDur) {
+      // Freeze last frame: hold trimOut frame for the rest of composition
+      if (layer.freezeLastFrame && !layer.loop) {
+        return { visible: true, mediaTime: Math.max(0, layer.trimOut - 0.001) };
+      }
+      return { visible: false, mediaTime: 0 };
+    }
 
     const trimLen = layer.trimOut - layer.trimIn;
     if (layer.loop && trimLen > 0) {
@@ -175,6 +204,10 @@ export const Compositor: React.FC = () => {
     }
   }, [computedDuration]);
 
+  // Ref for computedDuration (must be after useMemo above)
+  const computedDurationRef = useRef(computedDuration);
+  useEffect(() => { computedDurationRef.current = computedDuration; }, [computedDuration]);
+
   // ---- Canvas scale factor (fit canvas into the viewport) ----
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
   const [viewScale, setViewScale] = useState(1);
@@ -183,14 +216,16 @@ export const Compositor: React.FC = () => {
   useEffect(() => {
     const el = canvasWrapperRef.current;
     if (!el) return;
+    let alive = true;
     const ro = new ResizeObserver(() => {
+      if (!alive) return;
       const rect = el.getBoundingClientRect();
       const sx = (rect.width - 16) / canvasWidth;
       const sy = (rect.height - 16) / canvasHeight;
       setViewScale(Math.min(sx, sy, 1));
     });
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => { alive = false; ro.disconnect(); };
   }, [canvasWidth, canvasHeight]);
 
   // ---- Load video/image elements for each layer ----
@@ -201,8 +236,8 @@ export const Compositor: React.FC = () => {
         const vid = document.createElement('video');
         vid.src = layer.src;
         vid.crossOrigin = 'anonymous';
-        vid.loop = false; // Timeline manages looping
-        vid.muted = true;
+        vid.loop = false;
+        vid.muted = layer.muted ?? false;
         vid.playsInline = true;
         vid.preload = 'auto';
         vid.load();
@@ -235,6 +270,16 @@ export const Compositor: React.FC = () => {
     }
   }, [isPlaying]);
 
+  // ---- Sync muted state when layer.muted changes ----
+  useEffect(() => {
+    layers.forEach(layer => {
+      if (layer.type === 'video') {
+        const vid = videoRefs.current.get(layer.id);
+        if (vid) vid.muted = layer.muted ?? false;
+      }
+    });
+  }, [layers]);
+
   // ---- Image cache for image layers ----
   const imageCache = useRef<Map<string, HTMLImageElement>>(new Map());
   useEffect(() => {
@@ -260,16 +305,17 @@ export const Compositor: React.FC = () => {
     if (!ctx) return;
 
     // Master clock: advance playhead if playing
-    let currentTime = playheadTime;
-    if (isPlaying) {
+    let currentTime = playheadTimeRef.current;
+    if (isPlayingRef.current) {
       const elapsed = (performance.now() - playbackStartRef.current) / 1000;
       currentTime = playbackStartTimeRef.current + elapsed;
-      if (currentTime >= computedDuration) {
+      if (currentTime >= computedDurationRef.current) {
         currentTime = 0; // loop the composition
         playbackStartRef.current = performance.now();
         playbackStartTimeRef.current = 0;
       }
-      // Update state (throttled — only update ref, batch to state less often)
+      // Keep ref in sync before triggering re-render
+      playheadTimeRef.current = currentTime;
       updateState({ playheadTime: currentTime });
     }
 
@@ -297,11 +343,13 @@ export const Compositor: React.FC = () => {
 
       if (layer.type === 'video') {
         const vid = videoRefs.current.get(layer.id);
-        if (vid && vid.readyState >= 2) {
-          // Seek video to correct media time if drifted
-          const drift = Math.abs(vid.currentTime - mediaTime);
-          if (drift > 0.15) {
-            vid.currentTime = mediaTime;
+        if (vid && vid.readyState >= 1) {
+          // Only correct drift during active playback (not scrubbing — avoids black frames)
+          if (isPlayingRef.current && !vid.seeking) {
+            const drift = Math.abs(vid.currentTime - mediaTime);
+            if (drift > 0.15) {
+              vid.currentTime = mediaTime;
+            }
           }
           source = vid;
           srcW = vid.videoWidth;
@@ -372,7 +420,7 @@ export const Compositor: React.FC = () => {
     }
 
     animFrameRef.current = requestAnimationFrame(renderFrame);
-  }, [layers, selectedLayer, canvasWidth, canvasHeight, viewScale, isPlaying, playheadTime, computedDuration, getLayerMediaTime]);
+  }, [layers, selectedLayer, canvasWidth, canvasHeight, viewScale, getLayerMediaTime]);
 
   useEffect(() => {
     animFrameRef.current = requestAnimationFrame(renderFrame);
@@ -445,13 +493,27 @@ export const Compositor: React.FC = () => {
   };
 
   useEffect(() => {
+    const SNAP_PX = 8; // world-space pixel threshold for edge/center snap
+
+    const snapVal = (val: number, anchors: number[]) => {
+      const rounded = Math.round(val);
+      for (const a of anchors) {
+        if (Math.abs(rounded - a) <= SNAP_PX) return a;
+      }
+      return rounded;
+    };
+
     const onMouseMove = (e: MouseEvent) => {
       if (!dragState) return;
       const dx = (e.clientX - dragState.startX) / viewScale;
       const dy = (e.clientY - dragState.startY) / viewScale;
 
       if (dragState.mode === 'move') {
-        updateLayer(dragState.layerId, { x: dragState.startLX + dx, y: dragState.startLY + dy });
+        const rawX = dragState.startLX + dx;
+        const rawY = dragState.startLY + dy;
+        const snappedX = snapVal(rawX, [0, canvasWidth / 2, canvasWidth]);
+        const snappedY = snapVal(rawY, [0, canvasHeight / 2, canvasHeight]);
+        updateLayer(dragState.layerId, { x: snappedX, y: snappedY });
       } else {
         // Scale mode: use drag distance to compute scale factor
         const layer = layers.find(l => l.id === dragState.layerId);
@@ -482,7 +544,7 @@ export const Compositor: React.FC = () => {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
-  }, [dragState, viewScale, layers, updateLayer]);
+  }, [dragState, viewScale, layers, updateLayer, canvasWidth, canvasHeight]);
 
   // ---- Add layer from asset ----
   const addLayerFromAsset = (asset: ReferenceAsset) => {
@@ -692,7 +754,7 @@ export const Compositor: React.FC = () => {
 
       // Stop after composition duration
       setTimeout(() => {
-        mediaRecorder.stop();
+        if (mediaRecorder.state === 'recording') mediaRecorder.stop();
         videoRefs.current.forEach((vid) => vid.pause());
       }, exportDuration * 1000);
     } catch (err) {
@@ -735,6 +797,83 @@ export const Compositor: React.FC = () => {
     });
   }, [computedDuration, layers, getLayerMediaTime]);
 
+  // ---- Keyboard shortcuts: spacebar + arrow keys ----
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (!isPlayingRef.current) {
+          playbackStartRef.current = performance.now();
+          playbackStartTimeRef.current = playheadTimeRef.current;
+        }
+        updateState({ isPlaying: !isPlayingRef.current });
+      } else if (e.code === 'ArrowLeft') {
+        e.preventDefault();
+        const step = e.shiftKey ? 1 : 0.1;
+        handleSeek(Math.max(0, playheadTimeRef.current - step));
+      } else if (e.code === 'ArrowRight') {
+        e.preventDefault();
+        const step = e.shiftKey ? 1 : 0.1;
+        handleSeek(playheadTimeRef.current + step);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleSeek, updateState]);
+
+  // ---- Splitter drag for timeline resize ----
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!splitterDragRef.current) return;
+      const dy = splitterDragRef.current.startY - e.clientY;
+      setTimelineHeight(Math.max(100, Math.min(600, splitterDragRef.current.startH + dy)));
+    };
+    const onUp = () => { splitterDragRef.current = null; };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, []);
+
+  // ---- Layer list ghost drag ----
+  useEffect(() => { moveLayerRef.current = moveLayer; }, [moveLayer]);
+  useEffect(() => {
+    if (!listDragId) return;
+    listDragMovedRef.current = false; // reset threshold on new drag
+    const ROW_HEIGHT = 44;
+    const onMove = (e: MouseEvent) => {
+      const dy = e.clientY - listDragStartYRef.current;
+      // Only activate ghost after 5px movement
+      if (!listDragMovedRef.current && Math.abs(dy) <= 5) return;
+      listDragMovedRef.current = true;
+      setListGhostPos({ x: e.clientX, y: e.clientY });
+      if (dy < -ROW_HEIGHT / 2) {
+        moveLayerRef.current(listDragId, 'up');
+        listDragStartYRef.current -= ROW_HEIGHT;
+      } else if (dy > ROW_HEIGHT / 2) {
+        moveLayerRef.current(listDragId, 'down');
+        listDragStartYRef.current += ROW_HEIGHT;
+      }
+    };
+    const onUp = () => { setListDragId(null); setListGhostPos(null); listDragMovedRef.current = false; };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+  }, [listDragId]);
+
+  // ---- Close color picker on outside click ----
+  useEffect(() => {
+    if (!colorPickerLayerId) return;
+    const close = () => setColorPickerLayerId(null);
+    const t = setTimeout(() => window.addEventListener('click', close), 0);
+    return () => { clearTimeout(t); window.removeEventListener('click', close); };
+  }, [colorPickerLayerId]);
+
   // ---- Duplicate layer ----
   const duplicateLayer = useCallback((id: string) => {
     const layer = layers.find(l => l.id === id);
@@ -757,8 +896,8 @@ export const Compositor: React.FC = () => {
           <h1 className="text-sm font-black uppercase tracking-widest text-white flex items-center gap-2">
             <i className="fas fa-layer-group text-violet-500" /> Compositor
           </h1>
-          <span className="text-[10px] text-zinc-500 font-mono">{canvasWidth}×{canvasHeight}</span>
-          <span className="text-[10px] text-zinc-600 font-mono">{formatTimeShort(playheadTime)} / {formatTimeShort(computedDuration)}</span>
+          <span className="text-[10px] text-zinc-400 font-mono">{canvasWidth}×{canvasHeight}</span>
+          <span className="text-[10px] text-zinc-400 font-mono">{formatTimeShort(playheadTime)} / {formatTimeShort(computedDuration)}</span>
         </div>
         <div className="flex items-center gap-2">
           <SkinSelector type="slots" />
@@ -766,30 +905,32 @@ export const Compositor: React.FC = () => {
           <div className="flex gap-1">
             {RESOLUTION_PRESETS.map(p => {
               const isActive = canvasWidth === p.w && canvasHeight === p.h;
-              const visW = p.w > p.h ? 18 : p.w === p.h ? 14 : 10;
-              const visH = p.h > p.w ? 18 : p.h === p.w ? 14 : 10;
+              const isLandscape = p.w > p.h;
+              const isSquare = p.w === p.h;
+              const visW = isLandscape ? 16 : isSquare ? 12 : 8;
+              const visH = isLandscape ? 9 : isSquare ? 12 : 14;
               return (
                 <button
                   key={p.label}
                   onClick={() => updateState({ canvasWidth: p.w, canvasHeight: p.h })}
-                  className={`flex items-center gap-1 px-2 py-1 rounded-lg border transition-all ${
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-all ${
                     isActive
                       ? 'bg-cyan-600/20 border-cyan-600/50 text-cyan-400'
-                      : 'border-zinc-700/60 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600'
+                      : 'border-zinc-700/60 text-zinc-400 hover:text-zinc-300 hover:border-zinc-600'
                   }`}
-                  title={p.label}
+                  title={`${p.w}×${p.h}`}
                 >
                   <div
-                    className={`rounded-[2px] border ${isActive ? 'border-cyan-500/60 bg-cyan-500/20' : 'border-zinc-600/60 bg-zinc-700/30'}`}
-                    style={{ width: visW * 0.65, height: visH * 0.65 }}
+                    className={`rounded-[1px] border ${isActive ? 'border-cyan-500/60 bg-cyan-500/20' : 'border-zinc-600/60 bg-zinc-700/30'}`}
+                    style={{ width: visW, height: visH }}
                   />
-                  <span className="text-[9px] font-bold">{p.label.split(' ')[0]}</span>
+                  <span className="text-[9px] font-bold">{p.label}</span>
                 </button>
               );
             })}
           </div>
           {/* Playback controls */}
-          <button onClick={resetPlayback} className="text-zinc-500 hover:text-white w-8 h-8 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors" title="Reset">
+          <button onClick={resetPlayback} className="text-zinc-400 hover:text-white w-8 h-8 flex items-center justify-center rounded hover:bg-zinc-800 transition-colors" title="Reset">
             <i className="fas fa-backward-step text-xs" />
           </button>
           <button onClick={togglePlay} className="bg-violet-600 hover:bg-violet-500 text-white w-8 h-8 flex items-center justify-center rounded-lg transition-colors shadow" title={isPlaying ? 'Pause' : 'Play'}>
@@ -820,13 +961,12 @@ export const Compositor: React.FC = () => {
           {layers.length === 0 && (
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none gap-3">
               <i className="fas fa-layer-group text-5xl text-zinc-800" />
-              <span className="text-zinc-600 text-sm">Add layers from the panel on the right</span>
             </div>
           )}
         </div>
 
         {/* Right panel: Layers + Properties */}
-        <div className="w-80 border-l border-zinc-800 flex flex-col bg-zinc-900/50 shrink-0 overflow-hidden">
+        <div className="w-[480px] border-l border-zinc-800 flex flex-col bg-zinc-900/50 shrink-0 overflow-hidden">
           {/* Add layer buttons */}
           <div className="p-3 border-b border-zinc-800 flex gap-2">
             <button onClick={() => setShowAssetPicker(true)} disabled={labAssets.length === 0}
@@ -840,12 +980,12 @@ export const Compositor: React.FC = () => {
           </div>
 
           {/* Layer list */}
-          <div className="flex-1 overflow-y-auto">
-            <div className="p-2 text-[9px] font-bold text-zinc-600 uppercase tracking-widest px-3">
-              Layers ({layers.length}) — bottom to top
+          <div className="flex-1 overflow-y-auto min-h-0">
+            <div className="p-2 text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-3">
+              Layers ({layers.length})
             </div>
             {layers.length === 0 ? (
-              <div className="p-6 text-center text-zinc-600 text-xs">
+              <div className="p-6 text-center text-zinc-400 text-xs">
                 No layers yet.<br />Add videos or images.
               </div>
             ) : (
@@ -853,59 +993,114 @@ export const Compositor: React.FC = () => {
                 {layers.map((layer, idx) => {
                   const isSelected = selectedLayerId === layer.id;
                   const showOpacity = expandedOpacity === layer.id;
+                  // Only visually dim once drag movement threshold is exceeded (ghost is showing)
+                  const isDragging = listDragId === layer.id && listGhostPos !== null;
                   return (
                     <div key={layer.id}>
                       <div
                         onClick={() => updateState({ selectedLayerId: isSelected ? null : layer.id })}
-                        className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer border-b border-zinc-800/50 transition-colors ${
+                        onMouseDown={(e) => {
+                          // Don't start drag when interacting with buttons or inputs
+                          if ((e.target as HTMLElement).closest('button, input')) return;
+                          e.preventDefault();
+                          listDragStartYRef.current = e.clientY;
+                          setListDragId(layer.id);
+                        }}
+                        className={`flex items-center gap-1.5 px-2 py-1.5 cursor-grab active:cursor-grabbing border-b border-zinc-800/50 transition-colors ${
                           isSelected ? 'bg-violet-600/15' : 'hover:bg-zinc-800/50'
-                        }`}
+                        } ${isDragging ? 'opacity-30' : ''}`}
                       >
+
+                        {/* Color square → opens color picker popover */}
+                        <div className="relative shrink-0">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setColorPickerLayerId(colorPickerLayerId === layer.id ? null : layer.id);
+                            }}
+                            className="w-4 h-4 rounded border border-zinc-600/50 hover:ring-2 hover:ring-white/40 transition-all"
+                            style={{ backgroundColor: layer.color || (layer.type === 'video' ? '#7c3aed' : '#4338ca') }}
+                            title="Change color"
+                          />
+                          {colorPickerLayerId === layer.id && (
+                            <div
+                              className="absolute left-0 top-5 z-50 bg-zinc-900 border border-zinc-700 rounded-lg p-2 shadow-2xl flex flex-wrap gap-1"
+                              style={{ width: 116 }}
+                              onClick={e => e.stopPropagation()}
+                            >
+                              {LAYER_COLORS.map(c => (
+                                <button key={c} onClick={() => { updateLayer(layer.id, { color: c }); setColorPickerLayerId(null); }}
+                                  className={`w-5 h-5 rounded border-2 transition-transform hover:scale-110 ${layer.color === c ? 'border-white' : 'border-transparent'}`}
+                                  style={{ backgroundColor: c }} />
+                              ))}
+                              <button onClick={() => { updateLayer(layer.id, { color: undefined }); setColorPickerLayerId(null); }}
+                                className="text-[7px] text-zinc-400 hover:text-white px-1 py-0.5 rounded bg-zinc-700/60 hover:bg-zinc-700 w-full text-center mt-0.5">reset</button>
+                            </div>
+                          )}
+                        </div>
+
                         {/* Thumbnail */}
-                        <div className="w-8 h-8 rounded shrink-0 flex items-center justify-center border border-zinc-700/40 overflow-hidden bg-zinc-800">
+                        <div className="w-7 h-7 rounded shrink-0 flex items-center justify-center border border-zinc-700/40 overflow-hidden bg-zinc-800">
                           {layer.type === 'video' ? (
                             <i className="fas fa-film text-[10px] text-violet-400" />
                           ) : layer.src ? (
                             <img src={layer.src} alt="" className="w-full h-full object-cover rounded" />
                           ) : (
-                            <i className="fas fa-image text-[8px] text-zinc-500" />
+                            <i className="fas fa-image text-[8px] text-zinc-400" />
                           )}
                         </div>
 
-                        {/* Name */}
-                        <span className={`flex-1 truncate text-[11px] font-medium ${isSelected ? 'text-violet-300' : layer.visible ? 'text-zinc-200' : 'text-zinc-600 line-through'}`}>
-                          {layer.name}
-                        </span>
-                        {layer.chromaKey.enabled && <span className="text-[8px] px-1.5 py-0.5 rounded-full font-bold text-black" style={{ backgroundColor: layer.chromaKey.color === 'green' ? '#00fa15' : layer.chromaKey.color === 'blue' ? '#0072ff' : '#ff4dfd' }}>CK</span>}
+                        {/* Name — double-click to rename */}
+                        {renamingLayerId === layer.id ? (
+                          <input
+                            autoFocus
+                            className="flex-1 min-w-0 bg-zinc-700 border border-violet-500 rounded px-1.5 py-0.5 text-sm text-white outline-none"
+                            value={layer.name}
+                            onChange={e => updateLayer(layer.id, { name: e.target.value })}
+                            onBlur={() => setRenamingLayerId(null)}
+                            onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') setRenamingLayerId(null); e.stopPropagation(); }}
+                            onClick={e => e.stopPropagation()}
+                          />
+                        ) : (
+                          <span
+                            className={`flex-1 min-w-0 truncate text-sm font-medium ${isSelected ? 'text-violet-300' : layer.visible ? 'text-zinc-200' : 'text-zinc-500 line-through'}`}
+                            onDoubleClick={e => { e.stopPropagation(); setRenamingLayerId(layer.id); }}
+                            title={layer.name + ' — double-click to rename'}
+                          >
+                            {layer.name}
+                          </span>
+                        )}
+                        {layer.chromaKey.enabled && <span className="text-[8px] px-1 py-0.5 rounded font-bold text-black shrink-0" style={{ backgroundColor: '#00fa15' }}>CK</span>}
 
-                        {/* Controls */}
+                        {/* Controls — always visible */}
                         <div className="flex items-center gap-0.5 shrink-0">
-                          <button onClick={(e) => { e.stopPropagation(); moveLayer(layer.id, 'up'); }} className="text-zinc-600 hover:text-white w-5 h-5 flex items-center justify-center transition-colors" title="Move up">
-                            <i className="fas fa-chevron-up text-[8px]" />
-                          </button>
-                          <button onClick={(e) => { e.stopPropagation(); moveLayer(layer.id, 'down'); }} className="text-zinc-600 hover:text-white w-5 h-5 flex items-center justify-center transition-colors" title="Move down">
-                            <i className="fas fa-chevron-down text-[8px]" />
+                          <button onClick={(e) => { e.stopPropagation(); updateLayer(layer.id, { visible: !layer.visible }); }}
+                            className={`w-7 h-7 flex items-center justify-center transition-colors ${layer.visible ? 'text-zinc-400 hover:text-white' : 'text-zinc-600 hover:text-zinc-400'}`} title="Toggle visibility">
+                            <i className={`fas ${layer.visible ? 'fa-eye' : 'fa-eye-slash'} text-sm`} />
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); setExpandedOpacity(showOpacity ? null : layer.id); }}
-                            className={`w-5 h-5 flex items-center justify-center transition-colors ${showOpacity ? 'text-violet-400' : 'text-zinc-600 hover:text-zinc-400'}`}
+                            className={`w-7 h-7 flex items-center justify-center transition-colors ${showOpacity ? 'text-violet-400' : 'text-zinc-400 hover:text-white'}`}
                             title={`Opacity ${Math.round(layer.opacity * 100)}%`}
                           >
-                            <i className="fas fa-circle-half-stroke text-[8px]" />
+                            <i className="fas fa-circle-half-stroke text-sm" />
                           </button>
-                          <button onClick={(e) => { e.stopPropagation(); updateLayer(layer.id, { visible: !layer.visible }); }}
-                            className={`w-5 h-5 flex items-center justify-center transition-colors ${layer.visible ? 'text-zinc-400 hover:text-white' : 'text-zinc-700'}`} title="Toggle visibility">
-                            <i className={`fas ${layer.visible ? 'fa-eye' : 'fa-eye-slash'} text-[8px]`} />
-                          </button>
+                          {layer.type === 'video' && (
+                            <button onClick={(e) => { e.stopPropagation(); updateLayer(layer.id, { muted: !(layer.muted ?? false) }); }}
+                              className={`w-7 h-7 flex items-center justify-center transition-colors ${(layer.muted ?? false) ? 'text-zinc-600 hover:text-zinc-400' : 'text-zinc-400 hover:text-white'}`}
+                              title={layer.muted ? 'Unmute' : 'Mute'}>
+                              <i className={`fas ${(layer.muted ?? false) ? 'fa-volume-xmark' : 'fa-volume-high'} text-sm`} />
+                            </button>
+                          )}
                           <button onClick={(e) => { e.stopPropagation(); updateLayer(layer.id, { locked: !layer.locked }); }}
-                            className={`w-5 h-5 flex items-center justify-center transition-colors ${layer.locked ? 'text-amber-400' : 'text-zinc-600 hover:text-amber-400'}`} title={layer.locked ? 'Unlock' : 'Lock'}>
-                            <i className={`fas ${layer.locked ? 'fa-lock' : 'fa-lock-open'} text-[8px]`} />
+                            className={`w-7 h-7 flex items-center justify-center transition-colors ${layer.locked ? 'text-amber-400' : 'text-zinc-400 hover:text-amber-400'}`} title={layer.locked ? 'Unlock' : 'Lock'}>
+                            <i className={`fas ${layer.locked ? 'fa-lock' : 'fa-lock-open'} text-sm`} />
                           </button>
-                          <button onClick={(e) => { e.stopPropagation(); duplicateLayer(layer.id); }} className="text-zinc-700 hover:text-zinc-400 w-5 h-5 flex items-center justify-center transition-colors" title="Duplicate">
-                            <i className="fas fa-clone text-[8px]" />
+                          <button onClick={(e) => { e.stopPropagation(); duplicateLayer(layer.id); }} className="text-zinc-400 hover:text-white w-7 h-7 flex items-center justify-center transition-colors" title="Duplicate">
+                            <i className="fas fa-clone text-sm" />
                           </button>
-                          <button onClick={(e) => { e.stopPropagation(); removeLayer(layer.id); }} className="text-zinc-700 hover:text-red-400 w-5 h-5 flex items-center justify-center transition-colors" title="Remove">
-                            <i className="fas fa-trash text-[8px]" />
+                          <button onClick={(e) => { e.stopPropagation(); removeLayer(layer.id); }} className="text-zinc-400 hover:text-red-400 w-7 h-7 flex items-center justify-center transition-colors" title="Remove">
+                            <i className="fas fa-trash text-sm" />
                           </button>
                         </div>
                       </div>
@@ -913,7 +1108,7 @@ export const Compositor: React.FC = () => {
                       {/* Inline opacity slider */}
                       {showOpacity && (
                         <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800/60 border-b border-zinc-800/50">
-                          <span className="text-[9px] text-zinc-500 w-5 shrink-0">Op</span>
+                          <span className="text-[9px] text-zinc-400 w-5 shrink-0">Op</span>
                           <input
                             type="range"
                             min={0} max={100} step={1}
@@ -935,25 +1130,21 @@ export const Compositor: React.FC = () => {
           {selectedLayer && (
             <div className="border-t border-zinc-800 p-3 flex flex-col gap-3 shrink-0 max-h-[45%] overflow-y-auto">
               <div className="flex items-center justify-between">
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Properties</h4>
-                <button onClick={() => fitLayerToCanvas(selectedLayer.id)} className="text-[9px] text-zinc-500 hover:text-violet-400 uppercase font-bold transition-colors">
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Properties</h4>
+                <button onClick={() => fitLayerToCanvas(selectedLayer.id)} className="text-[9px] text-zinc-400 hover:text-violet-400 uppercase font-bold transition-colors">
                   <i className="fas fa-expand mr-1" />Fit to Canvas
                 </button>
               </div>
 
-              {/* Name */}
-              <input type="text" className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-xs text-white focus:border-violet-500 outline-none w-full"
-                value={selectedLayer.name} onChange={e => updateLayer(selectedLayer.id, { name: e.target.value })} />
-
               {/* Position */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[9px] text-zinc-600 font-bold uppercase">X</label>
+                  <label className="text-[9px] text-zinc-400 font-bold uppercase">X</label>
                   <input type="number" className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-[11px] text-white focus:border-violet-500 outline-none"
                     value={Math.round(selectedLayer.x)} onChange={e => updateLayer(selectedLayer.id, { x: Number(e.target.value) })} />
                 </div>
                 <div>
-                  <label className="text-[9px] text-zinc-600 font-bold uppercase">Y</label>
+                  <label className="text-[9px] text-zinc-400 font-bold uppercase">Y</label>
                   <input type="number" className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-[11px] text-white focus:border-violet-500 outline-none"
                     value={Math.round(selectedLayer.y)} onChange={e => updateLayer(selectedLayer.id, { y: Number(e.target.value) })} />
                 </div>
@@ -961,7 +1152,7 @@ export const Compositor: React.FC = () => {
 
               {/* Scale */}
               <div>
-                <label className="text-[9px] text-zinc-600 font-bold uppercase">Scale ({Math.round(selectedLayer.scaleX * 100)}%)</label>
+                <label className="text-[9px] text-zinc-400 font-bold uppercase">Scale ({Math.round(selectedLayer.scaleX * 100)}%)</label>
                 <input type="range" min="5" max="300" value={Math.round(selectedLayer.scaleX * 100)}
                   className="w-full accent-violet-500 h-1"
                   onChange={e => {
@@ -973,12 +1164,12 @@ export const Compositor: React.FC = () => {
               {/* Timeline: Loop + Speed */}
               <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700">
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-[9px] text-zinc-500 font-bold uppercase">Timeline</label>
+                  <label className="text-[9px] text-zinc-400 font-bold uppercase">Timeline</label>
                 </div>
                 <div className="flex flex-col gap-2">
                   {/* Loop toggle */}
                   <div className="flex items-center justify-between">
-                    <label className="text-[9px] text-zinc-600 font-bold uppercase">Loop</label>
+                    <label className="text-[9px] text-zinc-400 font-bold uppercase">Loop</label>
                     <button
                       onClick={() => updateLayer(selectedLayer.id, { loop: !selectedLayer.loop })}
                       className={`w-8 h-4 rounded-full transition-colors relative ${selectedLayer.loop ? 'bg-violet-600' : 'bg-zinc-700'}`}
@@ -986,25 +1177,44 @@ export const Compositor: React.FC = () => {
                       <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${selectedLayer.loop ? 'left-4' : 'left-0.5'}`} />
                     </button>
                   </div>
+                  {/* Freeze last frame toggle + duration */}
+                  {selectedLayer.type === 'video' && !selectedLayer.loop && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <label className="text-[9px] text-zinc-400 font-bold uppercase">Freeze Last Frame</label>
+                        <button
+                          onClick={() => updateLayer(selectedLayer.id, { freezeLastFrame: !selectedLayer.freezeLastFrame, freezeDuration: selectedLayer.freezeDuration ?? 2 })}
+                          className={`w-8 h-4 rounded-full transition-colors relative ${selectedLayer.freezeLastFrame ? 'bg-cyan-600' : 'bg-zinc-700'}`}
+                        >
+                          <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${selectedLayer.freezeLastFrame ? 'left-4' : 'left-0.5'}`} />
+                        </button>
+                      </div>
+                      {selectedLayer.freezeLastFrame && (
+                        <div>
+                          <label className="text-[9px] text-zinc-400 font-bold uppercase">Freeze Duration ({(selectedLayer.freezeDuration ?? 2).toFixed(1)}s)</label>
+                          <input type="range" min="1" max="300" step="1"
+                            value={Math.round((selectedLayer.freezeDuration ?? 2) * 10)}
+                            className="w-full accent-cyan-500 h-1"
+                            onChange={e => updateLayer(selectedLayer.id, { freezeDuration: Number(e.target.value) / 10 })} />
+                        </div>
+                      )}
+                    </>
+                  )}
                   {/* Speed slider */}
                   <div>
-                    <label className="text-[9px] text-zinc-600 font-bold uppercase">Speed ({selectedLayer.playbackRate.toFixed(2)}x)</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[9px] text-zinc-400 font-bold uppercase">Speed ({selectedLayer.playbackRate.toFixed(2)}x)</label>
+                      <button onClick={() => updateLayer(selectedLayer.id, { playbackRate: 1 })}
+                        className="text-[8px] text-zinc-400 hover:text-white px-1.5 py-0.5 rounded bg-zinc-700/60 hover:bg-zinc-700 transition-colors font-bold">×1</button>
+                    </div>
                     <input type="range" min="25" max="400" value={Math.round(selectedLayer.playbackRate * 100)}
                       className="w-full accent-violet-500 h-1"
                       onChange={e => updateLayer(selectedLayer.id, { playbackRate: Number(e.target.value) / 100 })} />
                   </div>
-                  {/* Timeline start */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[9px] text-zinc-600 font-bold uppercase">Start ({selectedLayer.timelineStart.toFixed(1)}s)</label>
-                      <input type="range" min="0" max={Math.max(computedDuration * 100, 3000)} value={Math.round(selectedLayer.timelineStart * 100)}
-                        className="w-full accent-indigo-500 h-1"
-                        onChange={e => updateLayer(selectedLayer.id, { timelineStart: Number(e.target.value) / 100 })} />
-                    </div>
-                    <div>
-                      <label className="text-[9px] text-zinc-600 font-bold uppercase">Duration ({getLayerTimelineDuration(selectedLayer).toFixed(1)}s)</label>
-                      <span className="text-[10px] text-zinc-400 block mt-0.5">{formatTimeShort(selectedLayer.trimIn)} – {formatTimeShort(selectedLayer.trimOut)}</span>
-                    </div>
+                  {/* Duration display */}
+                  <div className="flex items-center justify-between text-[9px] text-zinc-400">
+                    <span>Duration: <strong className="text-zinc-200">{getLayerTimelineDuration(selectedLayer).toFixed(1)}s</strong></span>
+                    <span>{formatTimeShort(selectedLayer.trimIn)} – {formatTimeShort(selectedLayer.trimOut)}</span>
                   </div>
                 </div>
               </div>
@@ -1012,7 +1222,7 @@ export const Compositor: React.FC = () => {
               {/* Chroma Key */}
               <div className="bg-zinc-800/50 rounded-lg p-3 border border-zinc-700">
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-[9px] text-zinc-500 font-bold uppercase">Chroma Key</label>
+                  <label className="text-[9px] text-zinc-400 font-bold uppercase">Chroma Key</label>
                   <button
                     onClick={() => updateLayer(selectedLayer.id, { chromaKey: { ...selectedLayer.chromaKey, enabled: !selectedLayer.chromaKey.enabled } })}
                     className={`w-8 h-4 rounded-full transition-colors relative ${selectedLayer.chromaKey.enabled ? 'bg-violet-600' : 'bg-zinc-700'}`}
@@ -1031,26 +1241,26 @@ export const Compositor: React.FC = () => {
                       />
                     </div>
                     <div>
-                      <label className="text-[9px] text-zinc-600 font-bold uppercase">Screen Gain / Tolerance ({selectedLayer.chromaKey.tolerance})</label>
+                      <label className="text-[9px] text-zinc-400 font-bold uppercase">Screen Gain / Tolerance ({selectedLayer.chromaKey.tolerance})</label>
                       <input type="range" min="5" max="100" value={selectedLayer.chromaKey.tolerance}
                         className="w-full accent-violet-500 h-1"
                         onChange={e => updateLayer(selectedLayer.id, { chromaKey: { ...selectedLayer.chromaKey, tolerance: Number(e.target.value) } })} />
                     </div>
                     <div>
-                      <label className="text-[9px] text-zinc-600 font-bold uppercase">Spill Suppression ({selectedLayer.chromaKey.spillSuppression})</label>
+                      <label className="text-[9px] text-zinc-400 font-bold uppercase">Spill Suppression ({selectedLayer.chromaKey.spillSuppression})</label>
                       <input type="range" min="0" max="100" value={selectedLayer.chromaKey.spillSuppression}
                         className="w-full accent-emerald-500 h-1"
                         onChange={e => updateLayer(selectedLayer.id, { chromaKey: { ...selectedLayer.chromaKey, spillSuppression: Number(e.target.value) } })} />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-[9px] text-zinc-600 font-bold uppercase">Clip Black ({selectedLayer.chromaKey.clipBlack})</label>
+                        <label className="text-[9px] text-zinc-400 font-bold uppercase">Clip Black ({selectedLayer.chromaKey.clipBlack})</label>
                         <input type="range" min="0" max="100" value={selectedLayer.chromaKey.clipBlack}
                           className="w-full accent-zinc-400 h-1"
                           onChange={e => updateLayer(selectedLayer.id, { chromaKey: { ...selectedLayer.chromaKey, clipBlack: Number(e.target.value) } })} />
                       </div>
                       <div>
-                        <label className="text-[9px] text-zinc-600 font-bold uppercase">Clip White ({selectedLayer.chromaKey.clipWhite})</label>
+                        <label className="text-[9px] text-zinc-400 font-bold uppercase">Clip White ({selectedLayer.chromaKey.clipWhite})</label>
                         <input type="range" min="0" max="100" value={selectedLayer.chromaKey.clipWhite}
                           className="w-full accent-zinc-100 h-1"
                           onChange={e => updateLayer(selectedLayer.id, { chromaKey: { ...selectedLayer.chromaKey, clipWhite: Number(e.target.value) } })} />
@@ -1065,20 +1275,51 @@ export const Compositor: React.FC = () => {
         </div>
       </div>
 
-      {/* Bottom: Timeline Panel */}
-      <CompositorTimeline
-        layers={layers}
-        playheadTime={playheadTime}
-        selectedLayerId={selectedLayerId}
-        timelineZoom={timelineZoom}
-        compositionDuration={computedDuration}
-        onSeek={handleSeek}
-        onUpdateLayer={updateLayer}
-        onSelectLayer={(id) => updateState({ selectedLayerId: id })}
-        onSetZoom={(z) => updateState({ timelineZoom: z })}
-        getLayerTimelineDuration={getLayerTimelineDuration}
-      />
+      {/* Draggable splitter */}
+      <div
+        className="h-2 shrink-0 cursor-row-resize bg-zinc-900 hover:bg-violet-900/30 border-t border-zinc-800 flex items-center justify-center transition-colors group"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          splitterDragRef.current = { startY: e.clientY, startH: timelineHeight };
+        }}
+      >
+        <div className="w-8 h-0.5 rounded-full bg-zinc-700 group-hover:bg-violet-500 transition-colors" />
       </div>
+
+      {/* Bottom: Timeline Panel (fixed height, user-resizable) */}
+      <div style={{ height: timelineHeight }} className="shrink-0 overflow-hidden">
+        <CompositorTimeline
+          layers={layers}
+          playheadTime={playheadTime}
+          selectedLayerId={selectedLayerId}
+          timelineZoom={timelineZoom}
+          compositionDuration={computedDuration}
+          onSeek={handleSeek}
+          onUpdateLayer={updateLayer}
+          onSelectLayer={(id) => updateState({ selectedLayerId: id })}
+          onSetZoom={(z) => updateState({ timelineZoom: z })}
+          onReorderLayer={(id, dir) => moveLayer(id, dir)}
+          onRenameLayer={(id, name) => updateLayer(id, { name })}
+          getLayerTimelineDuration={getLayerTimelineDuration}
+        />
+      </div>
+      </div>
+
+      {/* Layer drag ghost */}
+      {listDragId && listGhostPos && (() => {
+        const ghostLayer = layers.find(l => l.id === listDragId);
+        if (!ghostLayer) return null;
+        return (
+          <div
+            className="fixed z-[9999] bg-zinc-900 border border-violet-500/80 rounded-lg px-3 py-2 shadow-2xl flex items-center gap-2 pointer-events-none"
+            style={{ left: listGhostPos.x + 12, top: listGhostPos.y - 14 }}
+          >
+            <i className="fas fa-grip-lines text-zinc-500 text-[8px]" />
+            <div className="w-4 h-4 rounded-full border border-zinc-600" style={{ backgroundColor: ghostLayer.color || (ghostLayer.type === 'video' ? '#7c3aed' : '#4338ca') }} />
+            <span className="text-sm font-medium text-zinc-200 max-w-[200px] truncate">{ghostLayer.name}</span>
+          </div>
+        );
+      })()}
 
       {/* Asset Picker Modal */}
       {showAssetPicker && (
@@ -1088,11 +1329,11 @@ export const Compositor: React.FC = () => {
               <h3 className="text-lg font-black uppercase tracking-widest text-white flex items-center gap-2">
                 <i className="fas fa-folder-open text-violet-500" /> Add Layer from Assets
               </h3>
-              <button onClick={() => setShowAssetPicker(false)} className="text-zinc-500 hover:text-white"><i className="fas fa-times" /></button>
+              <button onClick={() => setShowAssetPicker(false)} className="text-zinc-400 hover:text-white"><i className="fas fa-times" /></button>
             </div>
             <div className="flex-1 overflow-y-auto p-6">
               {labAssets.length === 0 ? (
-                <div className="text-center py-12 text-zinc-500">No assets available. Generate some in the other studios first.</div>
+                <div className="text-center py-12 text-zinc-400">No assets available. Generate some in the other studios first.</div>
               ) : (
                 <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
                   {labAssets.map(asset => {

@@ -264,7 +264,7 @@ export const ConceptTab: React.FC = () => {
                               </>
                             ) : (
                               <>
-                                <svg className="w-5 h-5 text-zinc-500 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <svg className="w-5 h-5 text-zinc-400 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                                 </svg>
                                 <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => handleImageUpload(charIdx, refIdx, e)} />
@@ -276,12 +276,12 @@ export const ConceptTab: React.FC = () => {
                     </div>
                     {char.inputReferences && char.inputReferences.length > 0 && (
                       <div className="flex items-center justify-center gap-2 bg-zinc-900 rounded p-1 border border-zinc-700">
-                        <span className={`text-[9px] font-bold ${!char.preserveOriginal ? 'text-indigo-400' : 'text-zinc-500'}`}>Adapt Style</span>
+                        <span className={`text-[9px] font-bold ${!char.preserveOriginal ? 'text-indigo-400' : 'text-zinc-400'}`}>Adapt Style</span>
                         <button type="button" onClick={() => updateCharacter(charIdx, 'preserveOriginal', !char.preserveOriginal)}
                           className={`w-8 h-4 rounded-full relative transition-colors ${char.preserveOriginal ? 'bg-green-600' : 'bg-zinc-700'}`}>
                           <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${char.preserveOriginal ? 'left-4.5' : 'left-0.5'}`} />
                         </button>
-                        <span className={`text-[9px] font-bold ${char.preserveOriginal ? 'text-green-400' : 'text-zinc-500'}`}>Keep Exact</span>
+                        <span className={`text-[9px] font-bold ${char.preserveOriginal ? 'text-green-400' : 'text-zinc-400'}`}>Keep Exact</span>
                       </div>
                     )}
                   </div>

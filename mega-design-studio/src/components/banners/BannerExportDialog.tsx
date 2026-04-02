@@ -257,7 +257,7 @@ export const BannerExportDialog: React.FC = () => {
           {/* Format & Quality */}
           <div className="flex gap-4 items-end bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
             <div className="flex-1">
-              <label className="text-xs text-zinc-500 block mb-1.5">Format</label>
+              <label className="text-xs text-zinc-400 block mb-1.5">Format</label>
               <div className="flex gap-1.5">
                 {(['png', 'jpeg', 'webp'] as ExportFormat[]).map(f => (
                   <button
@@ -276,7 +276,7 @@ export const BannerExportDialog: React.FC = () => {
             </div>
             {format !== 'png' && (
               <div className="flex-1">
-                <label className="text-xs text-zinc-500 block mb-1.5">Quality: {quality}%</label>
+                <label className="text-xs text-zinc-400 block mb-1.5">Quality: {quality}%</label>
                 <input
                   type="range"
                   min={10}
@@ -293,7 +293,7 @@ export const BannerExportDialog: React.FC = () => {
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-zinc-300">
-                <i className="fa-solid fa-shield-check mr-2 text-zinc-500" />
+                <i className="fa-solid fa-shield-check mr-2 text-zinc-400" />
                 Quality Check
               </h3>
               <button
@@ -366,7 +366,7 @@ export const BannerExportDialog: React.FC = () => {
                       className="flex items-center justify-center bg-zinc-900"
                       style={{ aspectRatio: `${comp.width}/${comp.height}`, maxHeight: 120 }}
                     >
-                      <span className="text-[9px] text-zinc-600">{comp.width}x{comp.height}</span>
+                      <span className="text-[9px] text-zinc-400">{comp.width}x{comp.height}</span>
                     </div>
                     <div className="px-2 py-1.5 border-t border-zinc-700/50 flex items-center justify-between">
                       <span className="text-[10px] text-zinc-400 truncate flex-1">{comp.name}</span>
@@ -427,7 +427,7 @@ export const BannerExportDialog: React.FC = () => {
           className={`px-6 py-2.5 text-sm font-medium rounded-lg transition-all shadow-lg ${
             !isExporting && compositions.length > 0
               ? 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-cyan-600/20'
-              : 'bg-zinc-700 text-zinc-500 cursor-not-allowed shadow-none'
+              : 'bg-zinc-700 text-zinc-400 cursor-not-allowed shadow-none'
           }`}
         >
           {isExporting ? (

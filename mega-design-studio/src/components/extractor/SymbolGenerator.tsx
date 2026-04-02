@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useRef, useState, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { useExtractor } from '@/contexts/ExtractorContext';
 import { useApp } from '@/contexts/AppContext';
 import { SkinSelector } from '@/components/shared/SkinSelector';
@@ -12,12 +12,13 @@ import {
   generateBackgroundImage,
   generateAnimation,
   modifyImage,
+  upscaleSymbol,
   SYMBOL_WIDTH,
   SYMBOL_HEIGHT,
   LONG_TILE_WIDTH,
   LONG_TILE_HEIGHT,
 } from '@/services/gemini';
-import { SymbolItem, MergedFrame, ReferenceAsset } from '@/types';
+import { SymbolItem, MergedFrame, ReferenceAsset, SourceFrame, SlotLayout } from '@/types';
 import { VideoFullscreen } from '@/components/shared/VideoFullscreen';
 import { parallelBatch } from '@/services/parallelBatch';
 import { AspectRatioSelector } from '@/components/shared/AspectRatioSelector';
@@ -67,12 +68,59 @@ const DEFAULT_SYMBOL_NAMES = [
 ];
 
 // ---------------------------------------------------------------------------
+// SymbolVersionCard — shows one version of a symbol with its pixel dimensions
+// ---------------------------------------------------------------------------
+
+const SymbolVersionCard: React.FC<{ label: string; url: string | null | undefined; filename?: string }> = ({ label, url, filename }) => {
+  const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
+  useEffect(() => {
+    if (!url) return;
+    setDims(null);
+    const img = new Image();
+    img.onload = () => setDims({ w: img.naturalWidth, h: img.naturalHeight });
+    img.src = url;
+  }, [url]);
+  if (!url) return null;
+  return (
+    <div className="flex flex-col gap-2">
+      {/* Label + download */}
+      <div className="flex items-center justify-between px-1">
+        <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">{label}</span>
+        <a
+          href={url}
+          download={filename || `${label}.png`}
+          onClick={e => e.stopPropagation()}
+          className="text-zinc-400 hover:text-white transition-colors"
+          title={`Download ${label}`}
+        >
+          <i className="fas fa-download text-xs" />
+        </a>
+      </div>
+      {/* Image at actual pixel size, scrollable */}
+      <div className="bg-zinc-950 rounded-xl border border-zinc-700 overflow-auto" style={{ maxWidth: 500, maxHeight: '65vh' }}>
+        {dims ? (
+          <img src={url} style={{ width: dims.w, height: dims.h, display: 'block' }} />
+        ) : (
+          <div className="w-40 h-40 flex items-center justify-center">
+            <i className="fas fa-spinner animate-spin text-zinc-500" />
+          </div>
+        )}
+      </div>
+      {/* Dimensions */}
+      <div className="text-[10px] font-mono text-center text-zinc-500">
+        {dims ? `${dims.w} × ${dims.h} px` : <span className="animate-pulse text-zinc-600">loading…</span>}
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export const SymbolGenerator: React.FC = () => {
+export const SymbolGenerator: React.FC<{ isVisible?: boolean }> = ({ isVisible = true }) => {
   const { symbolGenState, setSymbolGenState, setReferenceAssets, referenceAssets } = useExtractor();
-  const { assetLibrary, addAsset } = useApp();
+  const { assetLibrary, addAsset, activeTab } = useApp();
   const { toast } = useToast();
 
   // Merged lab assets for asset picker (Feature 1)
@@ -90,6 +138,7 @@ export const SymbolGenerator: React.FC = () => {
     activeMasterView,
     reelsFrame,
     reelsFrameCropCoordinates,
+    hideReelsBg,
     symbols,
     mergedFrames,
     gridRows,
@@ -106,6 +155,8 @@ export const SymbolGenerator: React.FC = () => {
     selectedStartFrameId,
     selectedEndFrameId,
     animationPrompt,
+    animationPrompts,
+    animationVideoCount,
     generatedVideos,
     isGeneratingVideo,
     prompt,
@@ -116,6 +167,55 @@ export const SymbolGenerator: React.FC = () => {
   const updateState = (updates: Partial<typeof symbolGenState>) => {
     setSymbolGenState(prev => ({ ...prev, ...updates }));
   };
+
+  // ---- Multi-frame helpers ----
+  const activeFrame: SourceFrame | null = useMemo(() => {
+    const frames = symbolGenState.sourceFrames ?? [];
+    if (frames.length === 0) return null;
+    return frames.find(f => f.id === symbolGenState.activeSourceFrameId) ?? frames[0];
+  }, [symbolGenState.sourceFrames, symbolGenState.activeSourceFrameId]);
+
+  // Active layout helpers
+  const activeLayout: SlotLayout | null = useMemo(() => {
+    const layouts = symbolGenState.layouts ?? [];
+    if (layouts.length === 0) return null;
+    return layouts.find(l => l.id === symbolGenState.activeLayoutId) ?? layouts[0];
+  }, [symbolGenState.layouts, symbolGenState.activeLayoutId]);
+
+  const updateActiveFrame = useCallback((updates: Partial<SourceFrame>) => {
+    setSymbolGenState(prev => {
+      const frames = prev.sourceFrames ?? [];
+      if (frames.length === 0) return prev;
+      const frameId = prev.activeSourceFrameId ?? frames[0]?.id;
+      // Mirror frame fields to top-level so UI reads them immediately
+      // (the sync effect only fires on id change, not on data change)
+      const topLevel: Record<string, unknown> = {};
+      if ('masterImage' in updates)               topLevel.masterImage = updates.masterImage ?? null;
+      if ('reskinResult' in updates)              topLevel.reskinResult = updates.reskinResult ?? null;
+      if ('reelsFrame' in updates)                topLevel.reelsFrame = updates.reelsFrame ?? null;
+      if ('reelsFrameCropCoordinates' in updates) topLevel.reelsFrameCropCoordinates = updates.reelsFrameCropCoordinates ?? null;
+      if ('masterPrompt' in updates)              topLevel.masterPrompt = updates.masterPrompt ?? '';
+      if ('isProcessingMaster' in updates)        topLevel.isProcessingMaster = updates.isProcessingMaster ?? false;
+      if ('activeMasterView' in updates)          topLevel.activeMasterView = updates.activeMasterView ?? 'source';
+      return {
+        ...prev,
+        ...topLevel,
+        sourceFrames: frames.map(f => f.id === frameId ? { ...f, ...updates } : f),
+      };
+    });
+  }, [setSymbolGenState]);
+
+  const updateActiveLayout = useCallback((updates: Partial<SlotLayout>) => {
+    setSymbolGenState(prev => {
+      const layouts = prev.layouts ?? [];
+      if (layouts.length === 0) return prev;
+      const layoutId = prev.activeLayoutId ?? layouts[0]?.id;
+      return {
+        ...prev,
+        layouts: layouts.map(l => l.id === layoutId ? { ...l, ...updates } : l),
+      };
+    });
+  }, [setSymbolGenState]);
 
   // ---- Ephemeral UI state (not persisted to context) ----
   const masterWrapperRef = useRef<HTMLDivElement>(null);
@@ -147,6 +247,8 @@ export const SymbolGenerator: React.FC = () => {
 
   // Fullscreen preview
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  // Symbol multi-version viewer
+  const [viewingSymbol, setViewingSymbol] = useState<SymbolItem | null>(null);
 
   // Feature 1: Asset picker for loading from Lab
   const [showAssetPicker, setShowAssetPicker] = useState(false);
@@ -160,6 +262,86 @@ export const SymbolGenerator: React.FC = () => {
   // =========================================================================
   // Initialisation
   // =========================================================================
+
+  // Migrate legacy single-frame/layout state to multi-frame/layout on first load
+  useEffect(() => {
+    setSymbolGenState(prev => {
+      let updated = { ...prev };
+
+      // Migrate masterImage → sourceFrames[0] if sourceFrames is empty
+      if ((prev.sourceFrames ?? []).length === 0) {
+        const frame0: SourceFrame = {
+          id: crypto.randomUUID(),
+          name: 'Frame 1',
+          masterImage: prev.masterImage,
+          reskinResult: prev.reskinResult,
+          reelsFrame: prev.reelsFrame,
+          reelsFrameCropCoordinates: prev.reelsFrameCropCoordinates ?? null,
+          masterPrompt: prev.masterPrompt,
+          isProcessingMaster: false,
+          activeMasterView: prev.activeMasterView,
+        };
+        updated = { ...updated, sourceFrames: [frame0], activeSourceFrameId: frame0.id };
+      }
+
+      // Migrate layout state → layouts[0]
+      if ((prev.layouts ?? []).length === 0) {
+        const layout0: SlotLayout = {
+          id: crypto.randomUUID(),
+          name: 'Layout 1',
+          sourceFrameId: updated.sourceFrames[0]?.id ?? null,
+          gridRows: prev.gridRows,
+          gridCols: prev.gridCols,
+          gridState: prev.gridState,
+          layoutOffsetX: prev.layoutOffsetX,
+          layoutOffsetY: prev.layoutOffsetY,
+          layoutWidth: prev.layoutWidth,
+          layoutHeight: prev.layoutHeight,
+          layoutGutterHorizontal: prev.layoutGutterHorizontal,
+          layoutGutterVertical: prev.layoutGutterVertical,
+          symbolScale: prev.symbolScale,
+          hideReelsBg: prev.hideReelsBg ?? false,
+        };
+        updated = { ...updated, layouts: [layout0], activeLayoutId: layout0.id };
+      }
+
+      return updated;
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync active layout → top-level state fields (for backward compat)
+  useEffect(() => {
+    if (!activeLayout) return;
+    setSymbolGenState(prev => ({
+      ...prev,
+      gridRows: activeLayout.gridRows,
+      gridCols: activeLayout.gridCols,
+      gridState: activeLayout.gridState,
+      layoutOffsetX: activeLayout.layoutOffsetX,
+      layoutOffsetY: activeLayout.layoutOffsetY,
+      layoutWidth: activeLayout.layoutWidth,
+      layoutHeight: activeLayout.layoutHeight,
+      layoutGutterHorizontal: activeLayout.layoutGutterHorizontal,
+      layoutGutterVertical: activeLayout.layoutGutterVertical,
+      symbolScale: activeLayout.symbolScale,
+      hideReelsBg: activeLayout.hideReelsBg,
+    }));
+  }, [activeLayout?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync active frame → top-level state fields
+  useEffect(() => {
+    if (!activeFrame) return;
+    setSymbolGenState(prev => ({
+      ...prev,
+      masterImage: activeFrame.masterImage,
+      reskinResult: activeFrame.reskinResult,
+      reelsFrame: activeFrame.reelsFrame,
+      reelsFrameCropCoordinates: activeFrame.reelsFrameCropCoordinates,
+      masterPrompt: activeFrame.masterPrompt,
+      isProcessingMaster: activeFrame.isProcessingMaster,
+      activeMasterView: activeFrame.activeMasterView,
+    }));
+  }, [activeFrame?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (symbols.length === 0) {
@@ -177,7 +359,7 @@ export const SymbolGenerator: React.FC = () => {
 
   // Rebuild grid when rows/cols change
   useEffect(() => {
-    updateState({
+    updateActiveLayout({
       gridState: (() => {
         const next: string[][] = Array(gridRows)
           .fill(null)
@@ -218,7 +400,7 @@ export const SymbolGenerator: React.FC = () => {
       const img = new Image();
       img.onload = () => {
         setDetectedRatio(getClosestAspectRatioStatic(img.width, img.height));
-        updateState({
+        updateActiveFrame({
           masterImage: ev.target!.result as string,
           reskinResult: null,
           activeMasterView: 'source',
@@ -231,7 +413,7 @@ export const SymbolGenerator: React.FC = () => {
 
   const handleGenerateMaster = async () => {
     if (!masterImage || !masterPrompt) return;
-    updateState({ isProcessingMaster: true });
+    updateActiveFrame({ isProcessingMaster: true });
     try {
       // Build a smart reskin prompt — user only types the theme
       const symbolNames = symbols.map(s => s.name).join(', ');
@@ -262,7 +444,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
 
       const result = await generateBackgroundImage(fullPrompt, detectedRatio, masterImage);
       if (result) {
-        updateState({
+        updateActiveFrame({
           reskinResult: result,
           activeMasterView: 'reskinned',
           isProcessingMaster: false,
@@ -284,7 +466,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
     } catch (e) {
       console.error(e);
       toast('Master generation failed', { type: 'error' });
-      updateState({ isProcessingMaster: false });
+      updateActiveFrame({ isProcessingMaster: false });
     }
   };
 
@@ -293,7 +475,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
     const img = new Image();
     img.onload = () => {
       setDetectedRatio(getClosestAspectRatioStatic(img.width, img.height));
-      updateState({
+      updateActiveFrame({
         masterImage: asset.url,
         reskinResult: null,
         activeMasterView: 'source',
@@ -435,7 +617,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
       if (isFrame) {
         const storedFrameCrop = { ...crop };
         // Show processing state
-        updateState({
+        updateActiveFrame({
           reelsFrameCropCoordinates: storedFrameCrop,
           isProcessingMaster: true,
         });
@@ -444,7 +626,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
         try {
           const cleaned = await extractReelsFrame(cropDataUrl);
           const result = cleaned || cropDataUrl;
-          updateState({
+          updateActiveFrame({
             reelsFrame: result,
             isProcessingMaster: false,
           });
@@ -457,7 +639,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
         } catch (frameErr) {
           console.error('Frame extraction failed', frameErr);
           // Fallback to raw crop
-          updateState({
+          updateActiveFrame({
             reelsFrame: cropDataUrl,
             isProcessingMaster: false,
           });
@@ -726,6 +908,56 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
     }
   };
 
+  const handleUpscaleSymbol = useCallback(async (symbolId: string, scale: 2 | 3 = 2) => {
+    // Read current isolatedUrl from latest state snapshot
+    let isolatedUrl: string | null = null;
+    let symName = symbolId;
+    setSymbolGenState(prev => {
+      const sym = prev.symbols.find(s => s.id === symbolId);
+      if (!sym?.isolatedUrl) return prev;
+      isolatedUrl = sym.isolatedUrl;
+      symName = sym.name;
+      return { ...prev, symbols: prev.symbols.map(s => s.id === symbolId ? { ...s, isUpscaling: true } : s) };
+    });
+
+    // Wait a tick so state has settled before checking
+    await new Promise(r => setTimeout(r, 0));
+    if (!isolatedUrl) return;
+
+    try {
+      const result = await upscaleSymbol(isolatedUrl, scale);
+      if (result) {
+        setSymbolGenState(prev => ({
+          ...prev,
+          symbols: prev.symbols.map(s => s.id === symbolId
+            ? { ...s, isUpscaling: false, upscaledUrls: { ...s.upscaledUrls, [scale]: result } }
+            : s
+          ),
+        }));
+        toast(`${symName} upscaled ${scale}×`, { type: 'success' });
+      } else {
+        throw new Error('Upscale returned null');
+      }
+    } catch (e) {
+      console.error('[upscale]', e);
+      toast('Upscale failed', { type: 'error' });
+      setSymbolGenState(prev => ({
+        ...prev,
+        symbols: prev.symbols.map(s => s.id === symbolId ? { ...s, isUpscaling: false } : s),
+      }));
+    }
+  }, [setSymbolGenState, toast]);
+
+  const handleUpscaleAll = useCallback(async (scale: 2 | 3 = 2) => {
+    const eligible = symbols.filter(s => s.isolatedUrl && !s.isProcessing && !s.isUpscaling);
+    if (eligible.length === 0) return;
+    toast(`Upscaling ${eligible.length} symbol${eligible.length > 1 ? 's' : ''} ${scale}× in parallel…`, { type: 'info' });
+    const BATCH = 4;
+    for (let i = 0; i < eligible.length; i += BATCH) {
+      await Promise.all(eligible.slice(i, i + BATCH).map(sym => handleUpscaleSymbol(sym.id, scale)));
+    }
+  }, [symbols, handleUpscaleSymbol, toast]);
+
   const saveSymbolToAssets = (sym: SymbolItem) => {
     if (!sym.isolatedUrl) return;
     const asset: ReferenceAsset = {
@@ -814,7 +1046,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
   // Uses the original clean frame as a reference so the AI knows exactly what "clean" looks like.
   const autoReExtractBackground = async (reskinImageUrl: string) => {
     // We need the existing clean reelsFrame as reference
-    const cleanRef = reelsFrame;
+    const cleanRef = activeFrame?.reelsFrame ?? reelsFrame;
 
     setIsCleaningFrame(true);
 
@@ -825,7 +1057,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
 
     try {
       let dirtyCrop: string;
-      const frameCropCoords = reelsFrameCropCoordinates;
+      const frameCropCoords = activeFrame?.reelsFrameCropCoordinates ?? reelsFrameCropCoordinates;
 
       if (frameCropCoords && frameCropCoords.w > 0) {
         // Crop the reskinned image using stored coordinates
@@ -864,7 +1096,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
         }
       }
 
-      updateState({ reelsFrame: result });
+      updateActiveFrame({ reelsFrame: result });
       addAsset({
         id: `symgen-reelsframe-${Date.now()}`,
         url: result,
@@ -956,7 +1188,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
       if (isReelsFrame) {
         // Edit the reels frame background
         const modified = await modifyImage(symbolIsolatedUrl, prompt, '1:1', editAssets, true);
-        updateState({ reelsFrame: modified });
+        updateActiveFrame({ reelsFrame: modified });
         addAsset({ id: `symgen-reelsframe-${Date.now()}`, url: modified, type: 'background', name: 'Reels Frame (Edited)' });
         setIsCleaningFrame(false);
       } else {
@@ -1028,7 +1260,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
       // Detect aspect ratio from the frame image
       const cleaned = await extractReelsFrame(reelsFrame);
       if (cleaned) {
-        updateState({ reelsFrame: cleaned });
+        updateActiveFrame({ reelsFrame: cleaned });
         addAsset({
           id: `symgen-reelsframe-${Date.now()}`,
           url: cleaned,
@@ -1132,7 +1364,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
     const regularIds = symbols.filter(s => s.isolatedUrl && (s.spanRows || 1) === 1).map(s => s.id);
     const longTileIds = symbols.filter(s => s.isolatedUrl && (s.spanRows || 1) >= 3).map(s => s.id);
     if (regularIds.length === 0) { alert('Extract symbols first.'); return; }
-    updateState({ gridState: buildGridWithLongTiles(regularIds, longTileIds) });
+    updateActiveLayout({ gridState: buildGridWithLongTiles(regularIds, longTileIds), hideReelsBg: false });
   };
 
   const handleVShapeFill = () => {
@@ -1145,7 +1377,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
     const vCoords = [
       { r: 1, c: 0 }, { r: 2, c: 1 }, { r: 3, c: 2 }, { r: 2, c: 3 }, { r: 1, c: 4 },
     ].map(({ r, c }) => ({ r, c, id: wild.id }));
-    updateState({ gridState: buildGridWithLongTiles(others, longTileIds, vCoords) });
+    updateActiveLayout({ gridState: buildGridWithLongTiles(others, longTileIds, vCoords), hideReelsBg: false });
   };
 
   const handleChessboardFill = () => {
@@ -1162,11 +1394,33 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
           : others[Math.floor(Math.random() * others.length)]
       )
     );
-    updateState({ gridState: g });
+    updateActiveLayout({ gridState: g, hideReelsBg: false });
+  };
+
+  const handleClearVShapeFill = () => {
+    const wild = symbols.find(s => s.name === 'Wild' && (s.spanRows || 1) === 1);
+    if (!wild || !wild.isolatedUrl) { alert("Extract 'Wild' symbol first."); return; }
+    const vPositions = new Set(
+      [{ r: 1, c: 0 }, { r: 2, c: 1 }, { r: 3, c: 2 }, { r: 2, c: 3 }, { r: 1, c: 4 }]
+        .map(({ r, c }) => `${r}-${c}`)
+    );
+    const g = (gridState || []).map((row, r) =>
+      row.map((_, c) => vPositions.has(`${r}-${c}`) ? wild.id : '')
+    );
+    updateActiveLayout({ gridState: g, hideReelsBg: true });
+  };
+
+  const handleClearChessFill = () => {
+    const wild = symbols.find(s => s.name === 'Wild' && (s.spanRows || 1) === 1);
+    if (!wild || !wild.isolatedUrl) { alert("Extract 'Wild' symbol first."); return; }
+    const g = (gridState || []).map((row, r) =>
+      row.map((_, c) => (r + c) % 2 === 0 ? wild.id : '')
+    );
+    updateActiveLayout({ gridState: g, hideReelsBg: true });
   };
 
   const handleClearGrid = () => {
-    updateState({ gridState: (gridState || []).map(row => row.map(() => '')) });
+    updateActiveLayout({ gridState: (gridState || []).map(row => row.map(() => '')), hideReelsBg: false });
   };
 
   // ---- Drag & Drop ----
@@ -1318,14 +1572,21 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
       g[r][c] = src;
     }
 
-    updateState({ gridState: g });
+    updateActiveLayout({ gridState: g });
     setDragItem(null);
-  }, [dragItem, canvasEventToCell, gridState, symbols, gridRows, updateState]);
+  }, [dragItem, canvasEventToCell, gridState, symbols, gridRows, updateActiveLayout]);
+
+  // Determine which frame's reelsFrame to use as the layout canvas background
+  const layoutBackground = useMemo(() => {
+    if (!activeLayout?.sourceFrameId) return reelsFrame;
+    const frame = symbolGenState.sourceFrames.find(f => f.id === activeLayout.sourceFrameId);
+    return frame?.reelsFrame ?? reelsFrame;
+  }, [activeLayout, symbolGenState.sourceFrames, reelsFrame]);
 
   // ---- Sync canvas size to reels frame dimensions ----
   useEffect(() => {
     let cancelled = false;
-    const src = reelsFrame || masterImage;
+    const src = layoutBackground || masterImage;
     if (!src) return;
     const img = new Image();
     img.onload = () => {
@@ -1338,7 +1599,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
     };
     img.src = src;
     return () => { cancelled = true; };
-  }, [reelsFrame, masterImage]);
+  }, [layoutBackground, masterImage]);
 
   // ---- Canvas drawing ----
 
@@ -1416,9 +1677,9 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
     ctx.fillStyle = '#00FF00';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Reels frame — fills the entire canvas (canvas is sized to match)
-    if (reelsFrame) {
-      const frameImg = await loadImg(reelsFrame);
+    // Reels frame — fills the entire canvas (skipped in "clear" wild-only modes)
+    if (layoutBackground && !hideReelsBg) {
+      const frameImg = await loadImg(layoutBackground);
       if (frameImg.width && frameImg.height) {
         ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
       }
@@ -1528,12 +1789,25 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
         }
       });
     });
-  }, [gridState, reelsFrame, symbols, layoutWidth, layoutHeight, layoutOffsetX, layoutOffsetY, layoutGutterHorizontal, layoutGutterVertical, symbolScale, gridRows, gridCols, canvasSize, selectedLayoutSymbolId, hoveredLayoutSymbolId]);
+  }, [gridState, layoutBackground, hideReelsBg, symbols, layoutWidth, layoutHeight, layoutOffsetX, layoutOffsetY, layoutGutterHorizontal, layoutGutterVertical, symbolScale, gridRows, gridCols, canvasSize, selectedLayoutSymbolId, hoveredLayoutSymbolId]);
 
   useEffect(() => {
     const t = setTimeout(drawLayout, 100);
     return () => clearTimeout(t);
   }, [drawLayout, activeSubTab]);
+
+  // Pause all generated videos whenever this component becomes invisible:
+  // - switching SymbolGenerator's own sub-tabs (activeSubTab)
+  // - switching top-level app tabs (activeTab)
+  // - switching ToolkitTab sections to Character/Background/Compositor (isVisible)
+  // useLayoutEffect cleanup fires before the next DOM commit so videos are
+  // still in the DOM when pause() is called.
+  useLayoutEffect(() => {
+    const pauseAll = () =>
+      document.querySelectorAll<HTMLVideoElement>('[data-slot-video]').forEach(v => v.pause());
+    if (!isVisible) pauseAll();
+    return pauseAll;
+  }, [activeSubTab, activeTab, isVisible]);
 
   // ---- Merge & Save ----
 
@@ -1620,23 +1894,34 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
     const endFrame = allFrames.find(f => f.id === selectedEndFrameId);
     if (!startFrame || !endFrame) return;
 
+    const activePrompts = (animationPrompts || [animationPrompt]).filter(p => p.trim());
+    if (activePrompts.length === 0) { alert('Enter at least one animation prompt.'); return; }
+    const count = Math.min(4, Math.max(1, animationVideoCount || 1));
+    const total = activePrompts.length * count;
+
     updateState({ isGeneratingVideo: true });
     try {
-      const p = animationPrompt || 'Slot machine reels spinning with motion blur and then stopping';
-      // Pad frames with green screen to match the selected video aspect ratio
+      // Pad frames once — shared across all generations
       const paddedStart = await padFrameForVideoRatio(startFrame.dataUrl, videoAspectRatio);
       const paddedEnd = await padFrameForVideoRatio(endFrame.dataUrl, videoAspectRatio);
-      const { url } = await generateAnimation(paddedStart, paddedEnd, p, videoAspectRatio, 'fast');
-      const vidId = crypto.randomUUID();
+
+      const newVideos: { id: string; url: string; prompt?: string }[] = [];
+      for (const p of activePrompts) {
+        for (let i = 0; i < count; i++) {
+          const { url } = await generateAnimation(paddedStart, paddedEnd, p, videoAspectRatio, 'fast');
+          const vidId = crypto.randomUUID();
+          newVideos.push({ id: vidId, url, prompt: p });
+          addAsset({ id: vidId, url, type: 'game_symbol', name: `Slot Anim: ${p.slice(0, 20)}`, mediaType: 'video' });
+        }
+      }
       updateState({
-        generatedVideos: [{ id: vidId, url }, ...(generatedVideos || [])],
+        generatedVideos: [...newVideos, ...(generatedVideos || [])],
         isGeneratingVideo: false,
       });
-      // Auto-save video to Lab
-      addAsset({ id: vidId, url, type: 'game_symbol', name: `Slot Animation ${(generatedVideos || []).length + 1}`, mediaType: 'video' });
+      toast(`Generated ${total} animation${total > 1 ? 's' : ''}`, { type: 'success', sound: true });
     } catch (err) {
       console.error(err);
-      alert('Animation generation failed.');
+      toast('Animation generation failed.', { type: 'error' });
       updateState({ isGeneratingVideo: false });
     }
   };
@@ -1671,11 +1956,11 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
               <h3 className="text-lg font-black uppercase tracking-widest text-white flex items-center gap-2">
                 <i className="fas fa-folder-open text-indigo-500" /> Load from Assets
               </h3>
-              <button onClick={() => setShowAssetPicker(false)} className="text-zinc-500 hover:text-white"><i className="fas fa-times" /></button>
+              <button onClick={() => setShowAssetPicker(false)} className="text-zinc-400 hover:text-white"><i className="fas fa-times" /></button>
             </div>
             <div className="flex-1 overflow-y-auto p-6">
               {labAssets.length === 0 ? (
-                <div className="text-center py-12 text-zinc-500">No assets available yet.</div>
+                <div className="text-center py-12 text-zinc-400">No assets available yet.</div>
               ) : (
                 <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
                   {labAssets.map(asset => (
@@ -1703,27 +1988,27 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
               <h3 className="text-lg font-black uppercase tracking-widest text-white flex items-center gap-2">
                 <i className="fas fa-wand-magic-sparkles text-amber-500" /> Edit: {editingSymbol.name}
               </h3>
-              <button onClick={() => setEditingSymbol(null)} className="text-zinc-500 hover:text-white"><i className="fas fa-times" /></button>
+              <button onClick={() => setEditingSymbol(null)} className="text-zinc-400 hover:text-white"><i className="fas fa-times" /></button>
             </div>
             <div className="flex gap-4">
               <div className="w-1/3 aspect-square bg-black rounded-lg overflow-hidden border border-zinc-800 flex items-center justify-center p-2">
                 {editingSymbol.isolatedUrl && <img src={editingSymbol.isolatedUrl} className="max-w-full max-h-full object-contain" />}
-                <span className="absolute text-[9px] font-bold text-zinc-500 uppercase bg-black/60 px-2 py-0.5 rounded" style={{ position: 'relative', marginTop: 'auto' }}>Current</span>
+                <span className="absolute text-[9px] font-bold text-zinc-400 uppercase bg-black/60 px-2 py-0.5 rounded" style={{ position: 'relative', marginTop: 'auto' }}>Current</span>
               </div>
               <div className="flex-1 flex flex-col gap-4">
                 <div>
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase mb-2 block">Edit Instruction</label>
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase mb-2 block">Edit Instruction</label>
                   <textarea value={editPrompt} onChange={(e) => setEditPrompt(e.target.value)} className="w-full bg-black border border-zinc-700 rounded-lg p-3 text-sm text-white focus:border-indigo-500 outline-none resize-none h-24" placeholder='E.g. "Change color to gold", "Add glowing frame", "Make metallic"' />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase mb-2 block">Reference (Optional)</label>
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase mb-2 block">Reference (Optional)</label>
                   <div className="flex gap-2 items-center">
                     {editReference && <img src={editReference} className="w-10 h-10 rounded object-cover border border-zinc-700" />}
                     <label className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs px-4 py-2 rounded-lg cursor-pointer border border-zinc-700 flex items-center justify-center gap-2">
                       <i className="fas fa-upload" /> Upload Reference
                       <input type="file" accept="image/*" onChange={handleEditReferenceUpload} className="hidden" />
                     </label>
-                    {editReference && <button onClick={() => setEditReference(null)} className="text-zinc-500 hover:text-red-500 px-2"><i className="fas fa-trash" /></button>}
+                    {editReference && <button onClick={() => setEditReference(null)} className="text-zinc-400 hover:text-red-500 px-2"><i className="fas fa-trash" /></button>}
                   </div>
                 </div>
               </div>
@@ -1742,7 +2027,45 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
       {previewImage && (
         <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-8 backdrop-blur-md" onClick={() => setPreviewImage(null)}>
           <img src={previewImage} className="max-w-full max-h-full object-contain shadow-2xl border border-zinc-800 rounded-lg" />
-          <button className="absolute top-4 right-4 text-zinc-500 hover:text-white"><i className="fas fa-times text-2xl"></i></button>
+          <button className="absolute top-4 right-4 text-zinc-400 hover:text-white"><i className="fas fa-times text-2xl"></i></button>
+        </div>
+      )}
+
+      {/* Symbol Version Viewer — Original + ×2 + ×3 at actual pixel sizes */}
+      {viewingSymbol && (
+        <div className="fixed inset-0 z-[250] bg-black/90 flex items-center justify-center p-8 backdrop-blur-md" onClick={() => setViewingSymbol(null)}>
+          <div className="bg-zinc-950 border border-zinc-700 rounded-2xl p-6 shadow-2xl max-w-[95vw]" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-sm font-black uppercase tracking-widest text-white flex items-center gap-2">
+                <i className="fas fa-layer-group text-violet-400" /> {viewingSymbol.name} — Versions
+              </h3>
+              <button onClick={() => setViewingSymbol(null)} className="text-zinc-400 hover:text-white transition-colors ml-8">
+                <i className="fas fa-xmark text-lg" />
+              </button>
+            </div>
+            {/* Cards: side by side, each image at actual pixel size */}
+            <div className="flex gap-6 items-start overflow-x-auto pb-2">
+              <SymbolVersionCard
+                label="Original"
+                url={viewingSymbol.isolatedUrl}
+                filename={`${viewingSymbol.name}_original.png`}
+              />
+              {viewingSymbol.upscaledUrls?.[2] && (
+                <SymbolVersionCard
+                  label="×2 Upscale"
+                  url={viewingSymbol.upscaledUrls[2]}
+                  filename={`${viewingSymbol.name}_x2.png`}
+                />
+              )}
+              {viewingSymbol.upscaledUrls?.[3] && (
+                <SymbolVersionCard
+                  label="×3 Upscale"
+                  url={viewingSymbol.upscaledUrls[3]}
+                  filename={`${viewingSymbol.name}_x3.png`}
+                />
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -1767,15 +2090,89 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
         {activeSubTab === 'master' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full">
             {/* Controls */}
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 h-fit space-y-6">
+            <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl h-fit overflow-hidden">
+              {/* Frame switcher */}
+              <div className="flex items-center gap-1 px-3 pt-2 pb-1 border-b border-zinc-800 flex-wrap">
+                <span className="text-[9px] font-bold uppercase text-zinc-500 mr-1">FRAMES</span>
+                {(symbolGenState.sourceFrames ?? []).map((frame) => {
+                  const isActive = (symbolGenState.activeSourceFrameId ?? (symbolGenState.sourceFrames ?? [])[0]?.id) === frame.id;
+                  const frames = symbolGenState.sourceFrames ?? [];
+                  return (
+                    <div key={frame.id} className={`flex items-center gap-0.5 rounded text-[10px] font-bold transition-colors group/frametab ${isActive ? 'bg-violet-600' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
+                      {/* Name — double-click to rename */}
+                      <button
+                        onClick={() => updateState({ activeSourceFrameId: frame.id })}
+                        onDoubleClick={() => {
+                          const val = window.prompt('Rename frame:', frame.name);
+                          if (val?.trim()) {
+                            setSymbolGenState(prev => ({
+                              ...prev,
+                              sourceFrames: (prev.sourceFrames ?? []).map(f => f.id === frame.id ? { ...f, name: val.trim() } : f),
+                            }));
+                          }
+                        }}
+                        className={`px-2.5 py-1 ${isActive ? 'text-white' : 'text-zinc-400 hover:text-white'}`}
+                        title="Click to switch · Double-click to rename"
+                      >
+                        {frame.name}
+                        {frame.masterImage && <span className="ml-1 text-[8px] opacity-60">●</span>}
+                      </button>
+                      {/* Delete — only show when >1 frame */}
+                      {frames.length > 1 && (
+                        <button
+                          onClick={() => {
+                            if (!window.confirm(`Delete "${frame.name}"?`)) return;
+                            setSymbolGenState(prev => {
+                              const remaining = (prev.sourceFrames ?? []).filter(f => f.id !== frame.id);
+                              const newActive = prev.activeSourceFrameId === frame.id
+                                ? (remaining[0]?.id ?? null)
+                                : prev.activeSourceFrameId;
+                              return { ...prev, sourceFrames: remaining, activeSourceFrameId: newActive };
+                            });
+                          }}
+                          className={`pr-1.5 opacity-0 group-hover/frametab:opacity-100 transition-opacity ${isActive ? 'text-violet-200 hover:text-white' : 'text-zinc-500 hover:text-red-400'}`}
+                          title="Delete frame"
+                        >
+                          <i className="fas fa-xmark text-[8px]" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+                {/* Add frame — uses functional setState to avoid stale closure */}
+                <button
+                  onClick={() => {
+                    setSymbolGenState(prev => {
+                      const frames = prev.sourceFrames ?? [];
+                      const newFrame: SourceFrame = {
+                        id: crypto.randomUUID(),
+                        name: `Frame ${frames.length + 1}`,
+                        masterImage: null,
+                        reskinResult: null,
+                        reelsFrame: null,
+                        reelsFrameCropCoordinates: null,
+                        masterPrompt: '',
+                        isProcessingMaster: false,
+                        activeMasterView: 'source',
+                      };
+                      return { ...prev, sourceFrames: [...frames, newFrame], activeSourceFrameId: newFrame.id };
+                    });
+                  }}
+                  className="w-6 h-6 flex items-center justify-center rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                  title="Add new frame"
+                >
+                  <i className="fas fa-plus text-[9px]" />
+                </button>
+              </div>
               {/* Upload */}
+              <div className="p-6 space-y-6">
               <div>
-                <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500 mb-4">
+                <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400 mb-4">
                   A. Source Image
                 </h3>
                 <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-zinc-700 rounded-xl hover:border-indigo-500 hover:bg-zinc-800/50 transition-all cursor-pointer group">
-                  <i className="fas fa-upload text-2xl text-zinc-600 group-hover:text-indigo-400 mb-2" />
-                  <span className="text-xs font-bold text-zinc-500 group-hover:text-zinc-300">
+                  <i className="fas fa-upload text-2xl text-zinc-400 group-hover:text-indigo-400 mb-2" />
+                  <span className="text-xs font-bold text-zinc-400 group-hover:text-zinc-300">
                     Upload Full Slot Screen
                   </span>
                   <input type="file" accept="image/*" className="hidden" onChange={handleMasterUpload} />
@@ -1791,7 +2188,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                   )}
                 </button>
                 {masterImage && (
-                  <div className="text-[10px] text-zinc-500 mt-2 text-center">
+                  <div className="text-[10px] text-zinc-400 mt-2 text-center">
                     Detected Ratio: {detectedRatio}
                   </div>
                 )}
@@ -1799,10 +2196,10 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
 
               {/* Reskin Theme */}
               <div>
-                <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500 mb-2">
+                <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400 mb-2">
                   B. Reskin Theme
                 </h3>
-                <p className="text-[10px] text-zinc-600 mb-3">
+                <p className="text-[10px] text-zinc-400 mb-3">
                   Just type the theme. Layout, positions, and symbol types are auto-preserved.
                 </p>
                 <input
@@ -1810,7 +2207,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                   className="w-full bg-black border border-zinc-700 rounded-lg px-3 py-3 text-sm text-white focus:border-indigo-500 outline-none mb-2"
                   placeholder='e.g. "Christmas", "Ancient Egypt", "Cyberpunk Neon"'
                   value={masterPrompt}
-                  onChange={e => updateState({ masterPrompt: e.target.value })}
+                  onChange={e => updateActiveFrame({ masterPrompt: e.target.value })}
                   onKeyDown={e => { if (e.key === 'Enter' && masterImage && masterPrompt && !isProcessingMaster) handleGenerateMaster(); }}
                 />
                 <button
@@ -1825,19 +2222,20 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
               {/* View toggle — only shown when no reskin yet (once reskinned, both show side by side) */}
               {masterImage && !reskinResult && (
                 <div>
-                  <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500 mb-4">
+                  <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400 mb-4">
                     C. Active View
                   </h3>
                   <div className="flex bg-black rounded p-1 border border-zinc-800">
                     <button className="flex-1 py-2 rounded text-xs font-bold uppercase bg-zinc-700 text-white">
                       Original
                     </button>
-                    <button disabled className="flex-1 py-2 rounded text-xs font-bold uppercase text-zinc-600 cursor-not-allowed">
+                    <button disabled className="flex-1 py-2 rounded text-xs font-bold uppercase text-zinc-400 cursor-not-allowed">
                       Pending...
                     </button>
                   </div>
                 </div>
               )}
+              </div>{/* end p-6 space-y-6 */}
             </div>
 
             {/* Preview — side by side when reskinned, single when not */}
@@ -1852,7 +2250,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                   <img
                     src={masterImage}
                     className="max-w-full max-h-full object-contain shadow-xl rounded-lg border border-zinc-800 cursor-pointer"
-                    onClick={() => { updateState({ activeMasterView: 'source' }); setPreviewImage(masterImage); }}
+                    onClick={() => { updateActiveFrame({ activeMasterView: 'source' }); setPreviewImage(masterImage); }}
                   />
                 </div>
                 {/* Reskinned */}
@@ -1863,7 +2261,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                   <img
                     src={reskinResult}
                     className="max-w-full max-h-full object-contain shadow-xl rounded-lg border border-indigo-500/30 cursor-pointer"
-                    onClick={() => { updateState({ activeMasterView: 'reskinned' }); setPreviewImage(reskinResult); }}
+                    onClick={() => { updateActiveFrame({ activeMasterView: 'reskinned' }); setPreviewImage(reskinResult); }}
                   />
                 </div>
                 {isProcessingMaster && (
@@ -1937,6 +2335,22 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                     )}
                   </button>
                 )}
+                {symbols.some(s => s.isolatedUrl) && (
+                  <div className="relative group/upscaleall">
+                    <button
+                      onClick={() => handleUpscaleAll(2)}
+                      disabled={symbols.some(s => s.isUpscaling)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600/20 hover:bg-amber-600/40 border border-amber-500/30 text-amber-300 hover:text-amber-200 rounded-lg text-[10px] font-bold uppercase transition-colors disabled:opacity-40"
+                    >
+                      <i className="fas fa-expand-arrows-alt text-[10px]" />
+                      Upscale All
+                    </button>
+                    <div className="absolute right-0 top-9 bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl z-50 hidden group-hover/upscaleall:block min-w-[100px]">
+                      <button onClick={() => handleUpscaleAll(2)} className="block w-full px-3 py-1.5 text-[10px] text-zinc-300 hover:text-white hover:bg-zinc-700 text-left">All × 2</button>
+                      <button onClick={() => handleUpscaleAll(3)} className="block w-full px-3 py-1.5 text-[10px] text-zinc-300 hover:text-white hover:bg-zinc-700 text-left">All × 3</button>
+                    </div>
+                  </div>
+                )}
               </div>
               {reelsFrame && (
                 <div className="flex items-center gap-2 px-3 py-1 bg-blue-900/30 border border-blue-500/30 rounded">
@@ -1966,7 +2380,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                       <img src={sym.isolatedUrl} className="max-w-full max-h-full object-contain pointer-events-none" />
                     ) : (
                       <div className="flex flex-col items-center gap-1">
-                        <span className="text-zinc-500 text-xs font-bold">{sym.name}</span>
+                        <span className="text-zinc-400 text-xs font-bold">{sym.name}</span>
                         {isLongTile && <span className="text-amber-500 text-[9px] font-bold">TALL TILE (3×)</span>}
                         {sym.withFrame && <span className="text-blue-400 text-[9px] font-bold">WITH FRAME</span>}
                         {sym.symbolRole === 'high' && <span className="text-orange-400 text-[9px] font-bold">HIGH</span>}
@@ -1975,31 +2389,16 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                       </div>
                     )}
 
-                    {/* Badges */}
-                    <div className="absolute top-1 left-1 flex flex-col gap-0.5">
-                      {isLongTile && (
-                        <div className="bg-amber-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded shadow w-fit">
-                          3× TALL
+                    {/* Upscale badges — top right, stacked */}
+                    <div className="absolute top-1 right-1 flex flex-col gap-0.5 items-end">
+                      {sym.upscaledUrls?.[2] && (
+                        <div className="bg-violet-600 text-white text-xs font-black px-2 py-0.5 rounded shadow flex items-center gap-1">
+                          <i className="fas fa-expand-arrows-alt" /> ×2
                         </div>
                       )}
-                      {sym.withFrame && (
-                        <div className="bg-blue-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded shadow w-fit">
-                          FRAME
-                        </div>
-                      )}
-                      {sym.symbolRole === 'high' && (
-                        <div className="bg-orange-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded shadow w-fit">
-                          HIGH
-                        </div>
-                      )}
-                      {sym.symbolRole === 'wild' && (
-                        <div className="bg-purple-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded shadow w-fit">
-                          WILD
-                        </div>
-                      )}
-                      {sym.symbolRole === 'scatter' && (
-                        <div className="bg-emerald-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded shadow w-fit">
-                          SCATTER
+                      {sym.upscaledUrls?.[3] && (
+                        <div className="bg-violet-800 text-white text-xs font-black px-2 py-0.5 rounded shadow flex items-center gap-1">
+                          <i className="fas fa-expand-arrows-alt" /> ×3
                         </div>
                       )}
                     </div>
@@ -2008,44 +2407,67 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                       <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
                         <i className="fas fa-spinner animate-spin text-indigo-500" />
                       </div>
+                    ) : sym.isUpscaling ? (
+                      <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
+                        <div className="flex flex-col items-center gap-1">
+                          <i className="fas fa-spinner animate-spin text-amber-400" />
+                          <span className="text-[8px] text-amber-300 font-bold">UPSCALING</span>
+                        </div>
+                      </div>
                     ) : (
-                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
-                        <button
-                          onClick={() => handleStartCrop(sym.id)}
-                          className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded text-[10px] font-bold uppercase shadow-lg transition-all transform hover:scale-105"
-                        >
-                          {isLongTile
-                            ? (sym.isolatedUrl ? 'Re-Crop Tall' : 'Crop Tall Tile')
-                            : (sym.isolatedUrl ? 'Re-Crop' : 'Crop')}
-                        </button>
-                        {sym.rawCropDataUrl && (
+                      <div className="absolute inset-0 bg-black/75 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-2">
+                        <div className="grid grid-cols-3 gap-1 w-full">
+                          {/* Row 1: View | Retry | Re-Crop */}
+                          {sym.isolatedUrl ? (
+                            <button onClick={() => setViewingSymbol(sym)}
+                              className="bg-zinc-500 hover:bg-zinc-400 text-white py-1.5 rounded text-xs font-bold uppercase flex items-center justify-center gap-1">
+                              <i className="fas fa-magnifying-glass-plus" /> View
+                            </button>
+                          ) : <div />}
+                          {sym.rawCropDataUrl ? (
+                            <button onClick={() => handleRetryIsolation(sym.id)}
+                              className="bg-zinc-200 hover:bg-white text-black py-1.5 rounded text-xs font-bold uppercase flex items-center justify-center gap-1">
+                              <i className="fas fa-sync-alt" /> Retry
+                            </button>
+                          ) : <div />}
                           <button
-                            onClick={() => handleRetryIsolation(sym.id)}
-                            className="bg-white hover:bg-zinc-200 text-black px-3 py-1.5 rounded text-[10px] font-bold uppercase shadow-lg flex items-center gap-1 transition-all transform hover:scale-105"
+                            onClick={() => handleStartCrop(sym.id)}
+                            className="bg-indigo-600 hover:bg-indigo-500 text-white py-1.5 rounded text-xs font-bold uppercase flex items-center justify-center gap-1"
                           >
-                            <i className="fas fa-sync-alt" /> Retry
+                            <i className="fas fa-crop-alt" />
+                            {sym.isolatedUrl ? 'Re-Crop' : (isLongTile ? 'Crop↕' : 'Crop')}
                           </button>
-                        )}
-                        {sym.isolatedUrl && (
-                          <button
-                            onClick={() => { setEditingSymbol(sym); setEditPrompt(''); setEditReference(null); }}
-                            className="bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded text-[10px] font-bold uppercase shadow-lg flex items-center gap-1 transition-all transform hover:scale-105"
-                          >
-                            <i className="fas fa-wand-magic-sparkles" /> Edit
-                          </button>
-                        )}
-                        <label className="bg-zinc-700 hover:bg-zinc-600 text-white px-3 py-1.5 rounded text-[10px] font-bold uppercase shadow-lg flex items-center gap-1 transition-all transform hover:scale-105 cursor-pointer">
-                          <i className="fas fa-upload" /> Upload
-                          <input type="file" accept="image/*" className="hidden" onChange={(e) => handleUploadSymbol(sym.id, e)} />
-                        </label>
-                        {sym.isolatedUrl && (
-                          <button
-                            onClick={() => handleClearSymbol(sym.id)}
-                            className="bg-red-600/80 hover:bg-red-500 text-white px-3 py-1.5 rounded text-[10px] font-bold uppercase shadow-lg flex items-center gap-1 transition-all transform hover:scale-105"
-                          >
-                            <i className="fas fa-trash" /> Clear
-                          </button>
-                        )}
+                          {/* Row 2: Edit | Upload | Clear */}
+                          {sym.isolatedUrl ? (
+                            <button onClick={() => { setEditingSymbol(sym); setEditPrompt(''); setEditReference(null); }}
+                              className="bg-amber-600 hover:bg-amber-500 text-white py-1.5 rounded text-xs font-bold uppercase flex items-center justify-center gap-1">
+                              <i className="fas fa-wand-magic-sparkles" /> Edit
+                            </button>
+                          ) : <div />}
+                          <label className="bg-zinc-600 hover:bg-zinc-500 text-white py-1.5 rounded text-xs font-bold uppercase flex items-center justify-center gap-1 cursor-pointer">
+                            <i className="fas fa-upload" /> Upload
+                            <input type="file" accept="image/*" className="hidden" onChange={(e) => handleUploadSymbol(sym.id, e)} />
+                          </label>
+                          {sym.isolatedUrl ? (
+                            <button onClick={() => handleClearSymbol(sym.id)}
+                              className="bg-red-700 hover:bg-red-600 text-white py-1.5 rounded text-xs font-bold uppercase flex items-center justify-center gap-1">
+                              <i className="fas fa-trash" /> Clear
+                            </button>
+                          ) : <div />}
+                          {/* Row 3: ×2 ×3 — compact, left-aligned, not stretched */}
+                          {sym.isolatedUrl && (
+                            <div className="col-span-3 flex gap-1">
+                              <button onClick={() => handleUpscaleSymbol(sym.id, 2)}
+                                className="bg-violet-600 hover:bg-violet-500 text-white py-1.5 px-3 rounded text-xs font-bold uppercase flex items-center gap-1">
+                                <i className="fas fa-expand-arrows-alt" /> ×2
+                              </button>
+                              <button onClick={() => handleUpscaleSymbol(sym.id, 3)}
+                                className="bg-violet-700 hover:bg-violet-600 text-white py-1.5 px-3 rounded text-xs font-bold uppercase flex items-center gap-1">
+                                <i className="fas fa-expand-arrows-alt" /> ×3
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -2055,7 +2477,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                       <button
                         onClick={() => saveSymbolToAssets(sym)}
                         disabled={!sym.isolatedUrl}
-                        className="text-zinc-500 hover:text-white disabled:opacity-0"
+                        className="text-zinc-400 hover:text-white disabled:opacity-0"
                       >
                         <i className="fas fa-save" />
                       </button>
@@ -2074,7 +2496,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                         className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border transition-colors flex items-center gap-1 ${
                           isLongTile
                             ? 'bg-amber-600 border-amber-500 text-white shadow-lg shadow-amber-600/30'
-                            : 'border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-500'
+                            : 'border-zinc-700 text-zinc-400 hover:text-zinc-300 hover:border-zinc-500'
                         }`}
                         title="Toggle Tall Tile — spans 3 rows in layout, keeps background on crop"
                       >
@@ -2094,7 +2516,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                         className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border transition-colors flex items-center gap-1 ${
                           sym.withFrame
                             ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/30'
-                            : 'border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-500'
+                            : 'border-zinc-700 text-zinc-400 hover:text-zinc-300 hover:border-zinc-500'
                         }`}
                         title="Extract with decorative frame/border (keeps frame around symbol)"
                       >
@@ -2116,7 +2538,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                         className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border transition-colors flex items-center gap-1 ${
                           sym.symbolRole === 'wild'
                             ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-600/30'
-                            : 'border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-500'
+                            : 'border-zinc-700 text-zinc-400 hover:text-zinc-300 hover:border-zinc-500'
                         }`}
                         title="Mark as Wild — auto-enables frame extraction"
                       >
@@ -2138,7 +2560,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                         className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border transition-colors flex items-center gap-1 ${
                           sym.symbolRole === 'scatter'
                             ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-600/30'
-                            : 'border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-500'
+                            : 'border-zinc-700 text-zinc-400 hover:text-zinc-300 hover:border-zinc-500'
                         }`}
                         title="Mark as Scatter — auto-enables frame extraction"
                       >
@@ -2163,7 +2585,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                   ) : (
                     <div className="flex flex-col items-center gap-1">
                       <i className="fas fa-border-all text-blue-500 text-lg" />
-                      <span className="text-zinc-500 text-xs font-bold">Reels Frame</span>
+                      <span className="text-zinc-400 text-xs font-bold">Reels Frame</span>
                       <span className="text-blue-400 text-[9px] font-bold">NOT EXTRACTED</span>
                     </div>
                   )}
@@ -2210,14 +2632,14 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                               const reader = new FileReader();
                               reader.onload = () => {
                                 const url = reader.result as string;
-                                updateState({ reelsFrame: url });
+                                updateActiveFrame({ reelsFrame: url });
                                 addAsset({ id: `symgen-reelsframe-${Date.now()}`, url, type: 'background', name: 'Reels Frame (Uploaded)' });
                               };
                               reader.readAsDataURL(file);
                             }} />
                           </label>
                           <button
-                            onClick={() => updateState({ reelsFrame: null, reelsFrameCropCoordinates: null })}
+                            onClick={() => updateActiveFrame({ reelsFrame: null, reelsFrameCropCoordinates: null })}
                             className="bg-red-600/80 hover:bg-red-500 text-white px-3 py-1.5 rounded text-[10px] font-bold uppercase shadow-lg flex items-center gap-1 transition-all transform hover:scale-105"
                           >
                             <i className="fas fa-trash" /> Clear
@@ -2232,7 +2654,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                   {reelsFrame && (
                     <button
                       onClick={() => addAsset({ id: `symgen-reelsframe-${Date.now()}`, url: reelsFrame, type: 'background', name: 'Reels Frame' })}
-                      className="text-zinc-500 hover:text-white"
+                      className="text-zinc-400 hover:text-white"
                     >
                       <i className="fas fa-save" />
                     </button>
@@ -2248,29 +2670,92 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
         ================================================================= */}
         {activeSubTab === 'layout' && (
           <div className="flex flex-col gap-8 h-full">
+            {/* Layout switcher */}
+            <div className="flex items-center gap-1 px-3 pt-2 pb-1 border-b border-zinc-800 shrink-0 bg-zinc-900/50 rounded-xl border border-zinc-800">
+              <span className="text-[9px] font-bold uppercase text-zinc-500 mr-1">LAYOUTS</span>
+              {(symbolGenState.layouts ?? []).map((layout) => (
+                <button
+                  key={layout.id}
+                  onClick={() => {
+                    updateState({ activeLayoutId: layout.id });
+                  }}
+                  className={`px-2.5 py-1 rounded text-[10px] font-bold transition-colors ${
+                    (symbolGenState.activeLayoutId ?? (symbolGenState.layouts ?? [])[0]?.id) === layout.id
+                      ? 'bg-cyan-600 text-white'
+                      : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700'
+                  }`}
+                >
+                  {layout.name}
+                </button>
+              ))}
+              <button
+                onClick={() => {
+                  const newLayout: SlotLayout = {
+                    id: crypto.randomUUID(),
+                    name: `Layout ${(symbolGenState.layouts ?? []).length + 1}`,
+                    sourceFrameId: (symbolGenState.sourceFrames ?? [])[0]?.id ?? null,
+                    gridRows: 3,
+                    gridCols: 5,
+                    gridState: Array(3).fill(null).map(() => Array(5).fill('')),
+                    layoutOffsetX: 0,
+                    layoutOffsetY: 0,
+                    layoutWidth: 90,
+                    layoutHeight: 81,
+                    layoutGutterHorizontal: 10,
+                    layoutGutterVertical: 10,
+                    symbolScale: 105,
+                    hideReelsBg: false,
+                  };
+                  updateState({
+                    layouts: [...(symbolGenState.layouts ?? []), newLayout],
+                    activeLayoutId: newLayout.id,
+                  });
+                }}
+                className="w-6 h-6 flex items-center justify-center rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                title="Add new layout"
+              >
+                <i className="fas fa-plus text-[9px]" />
+              </button>
+              {/* Background frame selector for active layout */}
+              {activeLayout && (symbolGenState.sourceFrames ?? []).length > 1 && (
+                <div className="ml-auto flex items-center gap-1.5">
+                  <span className="text-[9px] text-zinc-500">BG:</span>
+                  <select
+                    value={activeLayout.sourceFrameId ?? ''}
+                    onChange={e => updateActiveLayout({ sourceFrameId: e.target.value || null })}
+                    className="bg-zinc-800 border border-zinc-700 text-zinc-300 text-[10px] rounded px-1.5 py-0.5 outline-none"
+                  >
+                    {(symbolGenState.sourceFrames ?? []).map(f => (
+                      <option key={f.id} value={f.id}>{f.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
             {/* TOP: LAYOUT EDITOR */}
             <div className="flex gap-4 min-h-[500px] max-h-[700px]">
               {/* LEFT PANEL: grid config + symbol library */}
               <div className="w-80 flex flex-col gap-4 shrink-0 overflow-y-auto pr-2">
                 {/* Grid Config */}
                 <div className="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800 space-y-4">
-                  <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500">
+                  <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400">
                     1. Grid Config
                   </h3>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-[9px] uppercase font-bold text-zinc-600 block mb-1">Rows</label>
+                      <label className="text-[9px] uppercase font-bold text-zinc-400 block mb-1">Rows</label>
                       <input
                         type="number" min={1} max={10} value={gridRows}
-                        onChange={e => updateState({ gridRows: parseInt(e.target.value) || 3 })}
+                        onChange={e => updateActiveLayout({ gridRows: parseInt(e.target.value) || 3 })}
                         className="w-full bg-black border border-zinc-700 rounded px-2 py-1 text-xs text-white"
                       />
                     </div>
                     <div>
-                      <label className="text-[9px] uppercase font-bold text-zinc-600 block mb-1">Cols</label>
+                      <label className="text-[9px] uppercase font-bold text-zinc-400 block mb-1">Cols</label>
                       <input
                         type="number" min={1} max={10} value={gridCols}
-                        onChange={e => updateState({ gridCols: parseInt(e.target.value) || 5 })}
+                        onChange={e => updateActiveLayout({ gridCols: parseInt(e.target.value) || 5 })}
                         className="w-full bg-black border border-zinc-700 rounded px-2 py-1 text-xs text-white"
                       />
                     </div>
@@ -2282,11 +2767,15 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                     <button onClick={handleChessboardFill} className="bg-zinc-800 hover:bg-zinc-700 text-white py-1.5 rounded text-[9px] font-bold uppercase border border-zinc-700">Chess</button>
                     <button onClick={handleClearGrid} className="bg-zinc-800 hover:bg-zinc-700 text-white py-1.5 rounded text-[9px] font-bold uppercase border border-zinc-700">Clear</button>
                   </div>
+                  <div className="grid grid-cols-2 gap-1 mt-1">
+                    <button onClick={handleClearVShapeFill} className="bg-zinc-900 hover:bg-zinc-800 text-emerald-400 py-1.5 rounded text-[9px] font-bold uppercase border border-zinc-700" title="Wilds only in V-shape, no background">Clear V-Shape</button>
+                    <button onClick={handleClearChessFill} className="bg-zinc-900 hover:bg-zinc-800 text-emerald-400 py-1.5 rounded text-[9px] font-bold uppercase border border-zinc-700" title="Wilds only in chess pattern, no background">Clear Chess</button>
+                  </div>
                 </div>
 
                 {/* Symbol Library */}
                 <div className="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800 flex-1 flex flex-col min-h-[300px]">
-                  <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500 mb-4">
+                  <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400 mb-4">
                     2. Symbols
                   </h3>
                   <div className="grid grid-cols-3 gap-2 overflow-y-auto auto-rows-max">
@@ -2321,7 +2810,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                       );
                     })}
                   </div>
-                  <div className="mt-4 text-[10px] text-zinc-500 text-center italic">
+                  <div className="mt-4 text-[10px] text-zinc-400 text-center italic">
                     Drag to grid to place.
                   </div>
                 </div>
@@ -2351,9 +2840,9 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
               </div>
 
               {/* RIGHT PANEL: sliders + frame */}
-              <div className="w-72 flex flex-col gap-4 shrink-0 overflow-y-auto">
-                <div className="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800 space-y-4 flex-1">
-                  <h3 className="text-xs font-black uppercase tracking-widest text-zinc-500">
+              <div className="w-72 flex flex-col gap-4 shrink-0">
+                <div className="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800 space-y-4 flex-1 overflow-y-auto">
+                  <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400">
                     3. Reel Window
                   </h3>
 
@@ -2361,58 +2850,58 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                   <div className="space-y-4">
                     <div>
                       <div className="flex justify-between items-center mb-1">
-                        <label className="text-[9px] uppercase font-bold text-zinc-500">Grid Width</label>
+                        <label className="text-[9px] uppercase font-bold text-zinc-400">Grid Width</label>
                         <span className="text-[9px] font-mono text-zinc-400">{layoutWidth}%</span>
                       </div>
-                      <input type="range" min={10} max={100} value={layoutWidth} onChange={e => updateState({ layoutWidth: +e.target.value })} className="w-full accent-indigo-500 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
+                      <input type="range" min={10} max={100} value={layoutWidth} onChange={e => updateActiveLayout({ layoutWidth: +e.target.value })} className="w-full accent-indigo-500 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
                     </div>
                     <div>
                       <div className="flex justify-between items-center mb-1">
-                        <label className="text-[9px] uppercase font-bold text-zinc-500">Grid Height</label>
+                        <label className="text-[9px] uppercase font-bold text-zinc-400">Grid Height</label>
                         <span className="text-[9px] font-mono text-zinc-400">{layoutHeight}%</span>
                       </div>
-                      <input type="range" min={10} max={100} value={layoutHeight} onChange={e => updateState({ layoutHeight: +e.target.value })} className="w-full accent-indigo-500 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
+                      <input type="range" min={10} max={100} value={layoutHeight} onChange={e => updateActiveLayout({ layoutHeight: +e.target.value })} className="w-full accent-indigo-500 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
                     </div>
                     <div>
                       <div className="flex justify-between items-center mb-1">
-                        <label className="text-[9px] uppercase font-bold text-zinc-500">Vertical Offset</label>
+                        <label className="text-[9px] uppercase font-bold text-zinc-400">Vertical Offset</label>
                         <span className="text-[9px] font-mono text-zinc-400">{layoutOffsetY || 0}px</span>
                       </div>
-                      <input type="range" min={-500} max={500} step={5} value={layoutOffsetY || 0} onChange={e => updateState({ layoutOffsetY: +e.target.value })} className="w-full accent-indigo-500 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
+                      <input type="range" min={-500} max={500} step={5} value={layoutOffsetY || 0} onChange={e => updateActiveLayout({ layoutOffsetY: +e.target.value })} className="w-full accent-indigo-500 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
                     </div>
                     <div>
                       <div className="flex justify-between items-center mb-1">
-                        <label className="text-[9px] uppercase font-bold text-zinc-500">Horizontal Offset</label>
+                        <label className="text-[9px] uppercase font-bold text-zinc-400">Horizontal Offset</label>
                         <span className="text-[9px] font-mono text-zinc-400">{layoutOffsetX || 0}px</span>
                       </div>
-                      <input type="range" min={-500} max={500} step={5} value={layoutOffsetX || 0} onChange={e => updateState({ layoutOffsetX: +e.target.value })} className="w-full accent-indigo-500 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
+                      <input type="range" min={-500} max={500} step={5} value={layoutOffsetX || 0} onChange={e => updateActiveLayout({ layoutOffsetX: +e.target.value })} className="w-full accent-indigo-500 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
                     </div>
 
                     <div className="h-px bg-zinc-800 my-2" />
 
                     <div>
                       <div className="flex justify-between items-center mb-1">
-                        <label className="text-[9px] uppercase font-bold text-zinc-500">H. Gutter</label>
+                        <label className="text-[9px] uppercase font-bold text-zinc-400">H. Gutter</label>
                         <span className="text-[9px] font-mono text-zinc-400">{layoutGutterHorizontal || 0}px</span>
                       </div>
-                      <input type="range" min={-50} max={100} step={1} value={layoutGutterHorizontal || 0} onChange={e => updateState({ layoutGutterHorizontal: +e.target.value })} className="w-full accent-indigo-500 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
+                      <input type="range" min={-50} max={100} step={1} value={layoutGutterHorizontal || 0} onChange={e => updateActiveLayout({ layoutGutterHorizontal: +e.target.value })} className="w-full accent-indigo-500 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
                     </div>
                     <div>
                       <div className="flex justify-between items-center mb-1">
-                        <label className="text-[9px] uppercase font-bold text-zinc-500">V. Gutter</label>
+                        <label className="text-[9px] uppercase font-bold text-zinc-400">V. Gutter</label>
                         <span className="text-[9px] font-mono text-zinc-400">{layoutGutterVertical || 0}px</span>
                       </div>
-                      <input type="range" min={-50} max={100} step={1} value={layoutGutterVertical || 0} onChange={e => updateState({ layoutGutterVertical: +e.target.value })} className="w-full accent-indigo-500 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
+                      <input type="range" min={-50} max={100} step={1} value={layoutGutterVertical || 0} onChange={e => updateActiveLayout({ layoutGutterVertical: +e.target.value })} className="w-full accent-indigo-500 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
                     </div>
 
                     <div className="h-px bg-zinc-800 my-2" />
 
                     <div>
                       <div className="flex justify-between items-center mb-1">
-                        <label className="text-[9px] uppercase font-bold text-zinc-500">Symbol Scale (All)</label>
+                        <label className="text-[9px] uppercase font-bold text-zinc-400">Symbol Scale (All)</label>
                         <span className="text-[9px] font-mono text-zinc-400">{symbolScale || 100}%</span>
                       </div>
-                      <input type="range" min={10} max={200} step={5} value={symbolScale || 100} onChange={e => updateState({ symbolScale: +e.target.value })} className="w-full accent-pink-500 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
+                      <input type="range" min={10} max={200} step={5} value={symbolScale || 100} onChange={e => updateActiveLayout({ symbolScale: +e.target.value })} className="w-full accent-pink-500 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
                     </div>
                   </div>
 
@@ -2421,7 +2910,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                     const sel = selectedLayoutSymbolId ? symbols.find(s => s.id === selectedLayoutSymbolId) : null;
                     if (!sel) return (
                       <div className="mt-3 bg-zinc-800/40 border border-zinc-700/40 rounded-lg p-3 text-center">
-                        <p className="text-[9px] text-zinc-600 italic">Click a symbol on the grid to adjust its individual scale.</p>
+                        <p className="text-[9px] text-zinc-400 italic">Click a symbol on the grid to adjust its individual scale.</p>
                       </div>
                     );
                     return (
@@ -2439,7 +2928,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                                 ),
                               }));
                             }}
-                            className="text-[8px] text-zinc-500 hover:text-white uppercase font-bold px-1.5 py-0.5 rounded border border-zinc-700 hover:border-zinc-500 transition-colors"
+                            className="text-[8px] text-zinc-400 hover:text-white uppercase font-bold px-1.5 py-0.5 rounded border border-zinc-700 hover:border-zinc-500 transition-colors"
                           >
                             Reset
                           </button>
@@ -2467,7 +2956,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                         </label>
                         <div>
                           <div className="flex justify-between items-center mb-1">
-                            <label className="text-[9px] uppercase font-bold text-zinc-500">H. Scale</label>
+                            <label className="text-[9px] uppercase font-bold text-zinc-400">H. Scale</label>
                             <span className="text-[9px] font-mono text-zinc-400">{sel.scaleX ?? 100}%</span>
                           </div>
                           <input
@@ -2489,7 +2978,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                         </div>
                         <div>
                           <div className="flex justify-between items-center mb-1">
-                            <label className="text-[9px] uppercase font-bold text-zinc-500">V. Scale</label>
+                            <label className="text-[9px] uppercase font-bold text-zinc-400">V. Scale</label>
                             <span className="text-[9px] font-mono text-zinc-400">{sel.scaleY ?? 100}%</span>
                           </div>
                           <input
@@ -2513,22 +3002,16 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                     );
                   })()}
 
-                  {/* Frame status indicator */}
-                  <div className="mt-4">
-                    {reelsFrame ? (
-                      <div className="flex items-center gap-2 px-3 py-2 bg-blue-900/20 border border-blue-500/30 rounded">
-                        <i className="fas fa-check text-blue-400 text-xs" />
-                        <span className="text-[10px] font-bold text-blue-200">Frame Active</span>
-                      </div>
-                    ) : (
+                  {!reelsFrame && (
+                    <div className="mt-4">
                       <button
                         onClick={() => { updateState({ activeSubTab: 'extract' }); handleStartFrameCrop(); }}
                         className="w-full text-[10px] bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-600/30 px-3 py-2 rounded uppercase font-bold transition-colors"
                       >
                         <i className="fas fa-border-all mr-1" /> Extract Frame in Extract Tab
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
                 </div>
                 <button
@@ -2549,50 +3032,26 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* Saved frames + prompt */}
+                {/* LEFT: Frames + controls */}
                 <div className="flex flex-col gap-4">
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-zinc-500 block mb-2">
-                      Animation Prompt
-                    </label>
-                    <textarea
-                      value={animationPrompt}
-                      onChange={e => updateState({ animationPrompt: e.target.value })}
-                      className="w-full bg-black border border-zinc-700 rounded-lg p-3 text-sm text-white focus:border-indigo-500 outline-none resize-none h-20"
-                      placeholder='E.g. "Slot machine reels spinning blur then stopping, cinematic lighting"'
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-zinc-500 block mb-2">
-                      Video Aspect Ratio
-                    </label>
-                    <AspectRatioSelector
-                      value={videoAspectRatio}
-                      onChange={(r) => setVideoAspectRatio(r as '16:9' | '9:16')}
-                      options={['16:9', '9:16']}
-                    />
-                    <p className="text-[9px] text-zinc-600 mt-1 italic">
-                      Green screen padding fills any missing space to match the selected ratio.
-                    </p>
-                  </div>
 
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-[10px] font-bold text-zinc-500 uppercase">
+                  {/* Saved Merged Frames — shown first */}
+                  <div className="flex items-center gap-4">
+                    <h4 className="text-xs font-bold text-white uppercase">
                       Saved Merged Frames ({frames.length})
                     </h4>
-                    <span className="text-[9px] text-zinc-600 italic">Select Start and End points for Veo 3.1</span>
+                    <span className="text-xs text-zinc-400">Select start and end frames</span>
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-6 overflow-y-auto max-h-[500px] p-2">
+                  <div className="grid grid-cols-3 gap-4 p-1">
                     {frames.length === 0 && (
                       <div className="col-span-2 text-center py-10 border border-dashed border-zinc-800 rounded-xl bg-zinc-900/30">
                         <i className="fas fa-images text-zinc-700 text-2xl mb-2" />
-                        <p className="text-zinc-600 text-xs">
-                          No saved frames yet.<br />Click "Merge & Save Frame" above.
+                        <p className="text-zinc-400 text-xs">
+                          No saved frames yet.<br />Click "Merge &amp; Save Frame" above.
                         </p>
                       </div>
                     )}
-
                     {frames.map((frame, i) => {
                       const isStart = selectedStartFrameId === frame.id;
                       const isEnd = selectedEndFrameId === frame.id;
@@ -2600,100 +3059,114 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                         <div
                           key={frame.id}
                           className={`relative bg-black border rounded-lg overflow-hidden group transition-all shadow-xl hover:shadow-2xl ${
-                            isStart
-                              ? 'border-indigo-500 ring-4 ring-indigo-500/20'
-                              : isEnd
-                              ? 'border-pink-500 ring-4 ring-pink-500/20'
-                              : 'border-zinc-800 hover:border-zinc-600'
+                            isStart ? 'border-indigo-500 ring-4 ring-indigo-500/20'
+                            : isEnd ? 'border-pink-500 ring-4 ring-pink-500/20'
+                            : 'border-zinc-800 hover:border-zinc-600'
                           }`}
                         >
-                          {isStart && (
-                            <div className="absolute top-2 left-2 bg-indigo-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow z-10 uppercase">
-                              Start
-                            </div>
-                          )}
-                          {isEnd && (
-                            <div className="absolute top-2 left-2 bg-pink-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow z-10 uppercase">
-                              End
-                            </div>
-                          )}
-
+                          {isStart && <div className="absolute top-2 left-2 bg-indigo-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow z-10 uppercase">Start</div>}
+                          {isEnd && <div className="absolute top-2 left-2 bg-pink-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow z-10 uppercase">End</div>}
                           <div className="absolute top-2 right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setPreviewImage(frame.dataUrl); }}
-                              className="w-8 h-8 rounded-full bg-black/60 hover:bg-white hover:text-black text-white flex items-center justify-center backdrop-blur-md shadow-lg transition-colors border border-white/10"
-                              title="Fullscreen Preview"
-                            >
-                              <i className="fas fa-eye text-xs"></i>
+                            <button onClick={(e) => { e.stopPropagation(); setPreviewImage(frame.dataUrl); }}
+                              className="w-8 h-8 rounded-full bg-black/60 hover:bg-white hover:text-black text-white flex items-center justify-center backdrop-blur-md shadow-lg transition-colors border border-white/10" title="Fullscreen Preview">
+                              <i className="fas fa-eye text-xs" />
                             </button>
                           </div>
-
                           <div className="aspect-[9/16] w-full relative">
-                            <img src={frame.dataUrl} className="w-full h-full object-cover" />
+                            <img src={frame.dataUrl} className="w-full h-full object-contain bg-black" />
                             <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-3 p-4">
                               <div className="flex gap-2 w-full">
-                                <button
-                                  onClick={() => updateState({ selectedStartFrameId: frame.id })}
-                                  className={`flex-1 py-2 text-[10px] font-bold uppercase rounded-lg ${
-                                    isStart ? 'bg-white text-indigo-900' : 'bg-indigo-600 text-white hover:bg-indigo-500'
-                                  }`}
-                                >
-                                  Start
-                                </button>
-                                <button
-                                  onClick={() => updateState({ selectedEndFrameId: frame.id })}
-                                  className={`flex-1 py-2 text-[10px] font-bold uppercase rounded-lg ${
-                                    isEnd ? 'bg-white text-pink-900' : 'bg-pink-600 text-white hover:bg-pink-500'
-                                  }`}
-                                >
-                                  End
-                                </button>
+                                <button onClick={() => updateState({ selectedStartFrameId: frame.id })}
+                                  className={`flex-1 py-2 text-[10px] font-bold uppercase rounded-lg ${isStart ? 'bg-white text-indigo-900' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}>Start</button>
+                                <button onClick={() => updateState({ selectedEndFrameId: frame.id })}
+                                  className={`flex-1 py-2 text-[10px] font-bold uppercase rounded-lg ${isEnd ? 'bg-white text-pink-900' : 'bg-pink-600 text-white hover:bg-pink-500'}`}>End</button>
                               </div>
-                              <button
-                                onClick={() => handleDeleteMergedFrame(frame.id)}
-                                className="w-full py-2 bg-zinc-800 hover:bg-red-900/50 text-zinc-400 hover:text-red-400 text-[10px] uppercase font-bold rounded-lg transition-colors border border-zinc-700"
-                              >
-                                Delete
-                              </button>
+                              <button onClick={() => handleDeleteMergedFrame(frame.id)}
+                                className="w-full py-2 bg-zinc-800 hover:bg-red-900/50 text-zinc-400 hover:text-red-400 text-[10px] uppercase font-bold rounded-lg transition-colors border border-zinc-700">Delete</button>
                             </div>
                           </div>
-                          <div className="p-3 bg-zinc-900/90 border-t border-zinc-800 text-[10px] text-zinc-400 font-mono text-center font-bold">
-                            Frame #{i + 1}
-                          </div>
+                          <div className="p-3 bg-zinc-900/90 border-t border-zinc-800 text-[10px] text-zinc-400 font-mono text-center font-bold">Frame #{i + 1}</div>
                         </div>
                       );
                     })}
                   </div>
 
-                  {/* Animate Selected Frames button - below the saved frames */}
-                  <button
-                    onClick={handleGenerateVideo}
-                    disabled={isGeneratingVideo || !selectedStartFrameId || !selectedEndFrameId}
-                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-lg text-xs font-black uppercase tracking-widest shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-95 mt-4"
-                  >
-                    {isGeneratingVideo ? (
-                      <i className="fas fa-spinner animate-spin" />
-                    ) : (
-                      <i className="fas fa-video" />
-                    )}
-                    {isGeneratingVideo ? 'Generating...' : 'Animate Selected Frames'}
-                  </button>
+                  {/* Animation Prompts */}
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-zinc-400 block mb-2">Animation Prompts</label>
+                    <div className="flex flex-col gap-2">
+                      {(animationPrompts || [animationPrompt]).map((vp, idx) => (
+                        <div key={idx} className="flex gap-2 items-start">
+                          <span className="text-[10px] text-zinc-400 font-bold mt-2.5 w-4 text-right">{idx + 1}.</span>
+                          <textarea
+                            className="flex-1 bg-black border border-zinc-700 rounded-lg p-2 text-sm text-white focus:border-indigo-500 outline-none resize-none h-16"
+                            placeholder={idx === 0 ? 'E.g. "Slot machine reels spinning blur then stopping"' : 'Another animation style...'}
+                            value={vp}
+                            onChange={e => {
+                              const updated = [...(animationPrompts || [animationPrompt])];
+                              updated[idx] = e.target.value;
+                              updateState({ animationPrompts: updated });
+                            }}
+                          />
+                          {(animationPrompts || []).length > 1 && (
+                            <button onClick={() => { const updated = (animationPrompts || []).filter((_, i) => i !== idx); updateState({ animationPrompts: updated }); }}
+                              className="text-zinc-400 hover:text-red-400 mt-2 transition-colors">
+                              <i className="fas fa-times" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      {(animationPrompts || []).length < 4 && (
+                        <button onClick={() => updateState({ animationPrompts: [...(animationPrompts || [animationPrompt]), ''] })}
+                          className="text-[10px] text-zinc-400 hover:text-indigo-400 uppercase font-bold flex items-center gap-1 self-start ml-6 transition-colors">
+                          <i className="fas fa-plus" /> Add Prompt (up to 4)
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Per-prompt count */}
+                  <div className="flex items-center gap-4">
+                    <label className="text-[10px] uppercase font-bold text-zinc-400">Per prompt:</label>
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 4].map(n => (
+                        <button key={n} onClick={() => updateState({ animationVideoCount: n })}
+                          className={`w-9 h-9 rounded-lg text-sm font-black transition-all ${(animationVideoCount || 1) === n ? 'bg-indigo-600 text-white shadow-lg scale-105' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 border border-zinc-700'}`}>
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Aspect ratio */}
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-zinc-400 block mb-2">Video Aspect Ratio</label>
+                    <AspectRatioSelector value={videoAspectRatio} onChange={(r) => setVideoAspectRatio(r as '16:9' | '9:16')} options={['16:9', '9:16']} />
+                  </div>
+
+                  {/* Animate button */}
+                  {(() => {
+                    const total = (animationPrompts || [animationPrompt]).filter(p => p.trim()).length * (animationVideoCount || 1);
+                    return (
+                      <button onClick={handleGenerateVideo} disabled={isGeneratingVideo || !selectedStartFrameId || !selectedEndFrameId}
+                        className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-lg text-xs font-black uppercase tracking-widest shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-95">
+                        {isGeneratingVideo
+                          ? <><i className="fas fa-spinner animate-spin" /> Generating...</>
+                          : <><i className="fas fa-video" /> Animate {total > 1 ? `${total} Videos` : 'Selected Frames'}</>}
+                      </button>
+                    );
+                  })()}
                 </div>
 
                 {/* Generated Videos Gallery */}
                 <div className="flex flex-col gap-4">
-                  <h4 className="text-[10px] font-bold text-zinc-500 uppercase mt-8 md:mt-0">
+                  <h4 className="text-[10px] font-bold text-zinc-400 uppercase">
                     Generated Videos ({(generatedVideos || []).length})
                   </h4>
-                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto max-h-[500px] p-1">
-                    {(generatedVideos || []).length === 0 && (
-                      <div className="col-span-2 text-center py-10 text-zinc-600 text-xs italic">
-                        No videos generated yet.
-                      </div>
-                    )}
+                  <div className="grid grid-cols-3 gap-4 overflow-y-auto max-h-[800px] p-1">
                     {(generatedVideos || []).map((vid, i) => (
                       <div key={vid.id} className="bg-black rounded-lg border border-zinc-800 overflow-hidden group relative shadow-lg">
-                        <video src={vid.url} className="w-full aspect-[9/16] object-cover" controls loop />
+                        <video data-slot-video src={vid.url} className="w-full aspect-[9/16] object-contain" controls loop />
                         <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button onClick={() => setFullscreenVideo(vid.url)} className="bg-black/50 hover:bg-white text-white hover:text-black w-7 h-7 rounded flex items-center justify-center transition-colors">
                             <i className="fas fa-expand text-[10px]" />
@@ -2703,6 +3176,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                           </a>
                         </div>
                         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {vid.prompt && <p className="text-[9px] text-zinc-300 line-clamp-2 mb-0.5">{vid.prompt}</p>}
                           <span className="text-[9px] font-bold text-white">Video #{i + 1}</span>
                         </div>
                       </div>
@@ -2776,7 +3250,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                 </div>
                 <button
                   onClick={() => { setCroppingSymbolId(null); setCropSourceOverride(null); }}
-                  className="text-zinc-500 hover:text-white"
+                  className="text-zinc-400 hover:text-white"
                 >
                   <i className="fas fa-times" />
                 </button>
@@ -2850,7 +3324,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
 
             {/* Modal footer */}
             <div className="h-16 border-t border-zinc-800 bg-zinc-900 flex items-center justify-between px-6">
-              <div className="text-[10px] text-zinc-500">
+              <div className="text-[10px] text-zinc-400">
                 <i className="fas fa-magic mr-2" />
                 {cropMode === 'frame'
                   ? 'Raw crop — pixel-perfect match. Use "AI Clean" button afterwards to remove symbols.'

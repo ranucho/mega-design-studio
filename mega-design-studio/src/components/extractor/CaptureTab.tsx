@@ -222,7 +222,7 @@ export const CaptureTab: React.FC = () => {
       {!videoUrl && segments.every(s => s.frames.length === 0) ? (
         <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-zinc-800 rounded-3xl bg-zinc-900/10">
           <i className="fas fa-film text-6xl text-zinc-800 mb-4"></i>
-          <p className="text-zinc-500 font-medium">Upload a video to begin capturing</p>
+          <p className="text-zinc-400 font-medium">Upload a video to begin capturing</p>
           <label className="mt-4 cursor-pointer bg-zinc-800 hover:bg-zinc-700 text-white px-6 py-3 rounded-lg text-sm font-bold uppercase transition-all shadow-lg">
             Select Video
             <input type="file" accept="video/*" className="hidden" onChange={handleFileUpload} />
@@ -236,7 +236,7 @@ export const CaptureTab: React.FC = () => {
               <i className="fas fa-folder-open text-indigo-400 text-lg"></i>
               <div>
                 <p className="text-sm font-bold text-zinc-300">Loaded from project</p>
-                <p className="text-[10px] text-zinc-500">{segments.length} segment{segments.length !== 1 ? 's' : ''} &middot; {segments.reduce((sum, s) => sum + s.frames.length, 0)} frames</p>
+                <p className="text-[10px] text-zinc-400">{segments.length} segment{segments.length !== 1 ? 's' : ''} &middot; {segments.reduce((sum, s) => sum + s.frames.length, 0)} frames</p>
               </div>
             </div>
             <label className="cursor-pointer bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all">
@@ -261,7 +261,7 @@ export const CaptureTab: React.FC = () => {
                       <img src={img} className="w-full h-full object-cover" />
                       {frame.isKeyframe && <span className="absolute top-1 left-1 bg-amber-500 text-black text-[8px] font-black px-1.5 py-0.5 rounded">KF</span>}
                     </div>
-                    <div className="p-1.5 text-[9px] text-zinc-500 font-mono">{frame.timestamp.toFixed(2)}s</div>
+                    <div className="p-1.5 text-[9px] text-zinc-400 font-mono">{frame.timestamp.toFixed(2)}s</div>
                   </div>
                 );
               })}
@@ -319,7 +319,7 @@ export const CaptureTab: React.FC = () => {
                   >Frames</button>
                 </div>
               </div>
-              <span className="text-[10px] text-zinc-500 font-mono uppercase">{activeSegmentId ? `Segment: ${activeSegmentId.split('-')[0]}` : "No Segment Selected"}</span>
+              <span className="text-[10px] text-zinc-400 font-mono uppercase">{activeSegmentId ? `Segment: ${activeSegmentId.split('-')[0]}` : "No Segment Selected"}</span>
             </div>
             <Timeline
               duration={videoDuration}

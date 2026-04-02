@@ -463,7 +463,7 @@ export const StudioTab: React.FC = () => {
                 {a.name}
               </button>
             ))}
-            <button onClick={() => setIsOpen(false)} className="text-[9px] text-zinc-500 hover:text-white text-center py-1">Close</button>
+            <button onClick={() => setIsOpen(false)} className="text-[9px] text-zinc-400 hover:text-white text-center py-1">Close</button>
           </div>
         )}
       </div>
@@ -471,7 +471,7 @@ export const StudioTab: React.FC = () => {
   };
 
   if (!activeSegment) {
-    return <div className="text-center py-20 text-zinc-600 min-h-[60vh] flex items-center justify-center">Select or create a segment in the Capture tab to process frames.</div>;
+    return <div className="text-center py-20 text-zinc-400 min-h-[60vh] flex items-center justify-center">Select or create a segment in the Capture tab to process frames.</div>;
   }
 
   return (
@@ -480,13 +480,13 @@ export const StudioTab: React.FC = () => {
       <section>
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400">1. Frame Processor</h3>
-          <div className="text-[10px] text-zinc-500 uppercase font-bold">{activeSegment.frames.length} Assets</div>
+          <div className="text-[10px] text-zinc-400 uppercase font-bold">{activeSegment.frames.length} Assets</div>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {activeSegment.frames.map((frame) => {
             const isComparing = comparingFrameIds.has(frame.id);
             let displayImage = frame.dataUrl;
-            let badge = <span className="bg-zinc-800 text-zinc-500 px-2 py-0.5 rounded text-[9px] font-bold uppercase">Raw</span>;
+            let badge = <span className="bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded text-[9px] font-bold uppercase">Raw</span>;
             if (frame.modifiedDataUrl) {
               displayImage = isComparing ? (frame.cleanedDataUrl || frame.dataUrl) : frame.modifiedDataUrl;
               badge = <span className="bg-indigo-500/20 text-indigo-300 border-indigo-500/30 border px-2 py-0.5 rounded text-[9px] font-bold uppercase">Modified</span>;
@@ -552,7 +552,7 @@ export const StudioTab: React.FC = () => {
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div>
-            <label className="text-[10px] uppercase font-bold text-zinc-500 mb-2 block">Modification Prompt</label>
+            <label className="text-[10px] uppercase font-bold text-zinc-400 mb-2 block">Modification Prompt</label>
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-2 bg-black/50 border border-zinc-700 rounded-lg p-2">
                 <textarea className="w-full bg-transparent text-sm text-white focus:outline-none resize-y min-h-[120px]" placeholder="E.g. Cyberpunk style, neon lights, rainy street..." value={modificationPrompt} onChange={e => setModificationPrompt(e.target.value)} rows={3} />
@@ -573,7 +573,7 @@ export const StudioTab: React.FC = () => {
           </div>
           <div>
             <div className="border border-zinc-800 rounded-lg p-4 bg-black/20 h-full">
-              <label className="text-[9px] uppercase font-bold text-zinc-500 mb-2 flex items-center gap-2"><i className="fas fa-layer-group"></i> Asset Manager</label>
+              <label className="text-[9px] uppercase font-bold text-zinc-400 mb-2 flex items-center gap-2"><i className="fas fa-layer-group"></i> Asset Manager</label>
               <div className="flex flex-col gap-2 mb-2">
                 {referenceAssets.map((asset) => (
                   <div key={asset.id} className="flex gap-3 bg-black/40 p-2 rounded-lg border border-zinc-700/50 group relative">
@@ -588,7 +588,7 @@ export const StudioTab: React.FC = () => {
                       <div className="flex justify-between items-center gap-2">
                         <input type="text" value={asset.name || ''} onChange={(e) => setReferenceAssets(prev => prev.map(a => a.id === asset.id ? { ...a, name: e.target.value } : a))} placeholder="Trigger Word" className="bg-transparent text-[9px] font-bold text-indigo-400 uppercase placeholder-zinc-700 outline-none w-full border-b border-transparent focus:border-indigo-500" />
                         {asset.name && <button onClick={() => { navigator.clipboard.writeText(asset.name || ''); setCopiedId(asset.id); setTimeout(() => setCopiedId(null), 1500); }} className="bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white w-6 h-6 rounded flex items-center justify-center border border-zinc-700 transition-colors shrink-0" title="Copy"><i className={`fas ${copiedId === asset.id ? 'fa-check text-green-500' : 'fa-copy'} text-[10px]`}></i></button>}
-                        <button onClick={() => setReferenceAssets(prev => prev.filter(a => a.id !== asset.id))} className="text-zinc-500 hover:text-red-400"><i className="fas fa-times"></i></button>
+                        <button onClick={() => setReferenceAssets(prev => prev.filter(a => a.id !== asset.id))} className="text-zinc-400 hover:text-red-400"><i className="fas fa-times"></i></button>
                       </div>
                       <select value={asset.type} onChange={(e) => setReferenceAssets(prev => prev.map(a => a.id === asset.id ? { ...a, type: e.target.value as AssetType } : a))} className="w-full bg-zinc-800 text-white text-[10px] rounded px-2 py-1 border border-zinc-700 outline-none focus:border-indigo-500">
                         <option value="game_symbol">Game Symbol</option>
@@ -604,7 +604,7 @@ export const StudioTab: React.FC = () => {
                   </div>
                 ))}
                 <input type="file" ref={replaceAssetInputRef} className="hidden" accept="image/*" onChange={handleReplaceAssetFileChange} />
-                <label className="flex items-center justify-center w-full py-3 border border-dashed border-zinc-700 rounded-lg cursor-pointer hover:bg-zinc-800 transition-colors gap-2 text-zinc-500 hover:text-white">
+                <label className="flex items-center justify-center w-full py-3 border border-dashed border-zinc-700 rounded-lg cursor-pointer hover:bg-zinc-800 transition-colors gap-2 text-zinc-400 hover:text-white">
                   <i className="fas fa-plus text-xs"></i><span className="text-[10px] font-bold uppercase">Add Reference Asset</span>
                   <input type="file" accept="image/*" multiple onChange={handleAssetUpload} className="hidden" />
                 </label>
@@ -616,7 +616,7 @@ export const StudioTab: React.FC = () => {
               )}
               {masterSheetUrl && (
                 <div className="mt-3 bg-black/40 border border-indigo-500/30 rounded-lg p-2">
-                  <div className="flex justify-between items-center mb-2"><span className="text-[9px] font-black uppercase text-indigo-400 tracking-widest">Active Master Reference</span><button onClick={() => setMasterSheetUrl(null)} className="text-zinc-500 hover:text-white text-[10px]"><i className="fas fa-times"></i></button></div>
+                  <div className="flex justify-between items-center mb-2"><span className="text-[9px] font-black uppercase text-indigo-400 tracking-widest">Active Master Reference</span><button onClick={() => setMasterSheetUrl(null)} className="text-zinc-400 hover:text-white text-[10px]"><i className="fas fa-times"></i></button></div>
                   <div className="w-full h-24 bg-black rounded overflow-hidden cursor-pointer" onClick={() => setPreviewImage(masterSheetUrl)}><img src={masterSheetUrl} className="w-full h-full object-cover" /></div>
                 </div>
               )}
@@ -644,17 +644,17 @@ export const StudioTab: React.FC = () => {
           )}
         </div>
         {currentKeyframes.length < 2 ? (
-          <div className="text-center py-8 border border-dashed border-zinc-800 rounded-xl bg-black/20"><p className="text-zinc-500 text-xs">Mark at least 2 keyframes in the Frame Processor to build a storyboard sequence.</p></div>
+          <div className="text-center py-8 border border-dashed border-zinc-800 rounded-xl bg-black/20"><p className="text-zinc-400 text-xs">Mark at least 2 keyframes in the Frame Processor to build a storyboard sequence.</p></div>
         ) : (
           <div className="space-y-4">
             {currentKeyframes.slice(0, -1).map((startFrame, i) => {
               const endFrame = currentKeyframes[i + 1];
               return (
                 <div key={startFrame.id} draggable onDragStart={(e) => handleDragStart(e, i)} onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, i)} className="flex flex-col md:flex-row gap-4 items-center bg-black/40 p-3 rounded-lg border border-zinc-800/50 cursor-move hover:border-indigo-500/50 transition-colors">
-                  <div className="text-zinc-600 cursor-grab"><i className="fas fa-grip-vertical"></i></div>
+                  <div className="text-zinc-400 cursor-grab"><i className="fas fa-grip-vertical"></i></div>
                   <div className="relative w-16 h-16 shrink-0 rounded overflow-hidden border border-zinc-700"><img src={startFrame.modifiedDataUrl || startFrame.dataUrl} className="w-full h-full object-cover" /><span className="absolute bottom-0 left-0 right-0 bg-black/60 text-[8px] text-center text-white font-mono">KF #{i + 1}</span></div>
                   <div className="flex-1 w-full">
-                    <label className="text-[9px] uppercase font-bold text-zinc-500 mb-1 block">Action / Transition {i + 1}</label>
+                    <label className="text-[9px] uppercase font-bold text-zinc-400 mb-1 block">Action / Transition {i + 1}</label>
                     <textarea className="w-full bg-zinc-950 border border-zinc-700 rounded p-2 text-xs text-white focus:border-indigo-500 outline-none resize-y" placeholder={`Describe motion from KF ${i + 1} to ${i + 2}...`} value={startFrame.transitionPrompt || ""} onChange={(e) => handleUpdateTransitionPrompt(startFrame.id, e.target.value)} rows={3} />
                   </div>
                   <div className="relative w-16 h-16 shrink-0 rounded overflow-hidden border border-zinc-700"><img src={endFrame.modifiedDataUrl || endFrame.dataUrl} className="w-full h-full object-cover" /><span className="absolute bottom-0 left-0 right-0 bg-black/60 text-[8px] text-center text-white font-mono">KF #{i + 2}</span></div>
@@ -670,18 +670,18 @@ export const StudioTab: React.FC = () => {
         <div className="flex items-center gap-4 mb-6"><div className="w-8 h-8 rounded bg-indigo-600 flex items-center justify-center font-bold text-sm">4</div><h3 className="text-sm font-black uppercase tracking-widest text-zinc-200">Export & Production</h3></div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
           <div>
-            <label className="text-[10px] uppercase font-bold text-zinc-500 mb-2 block">Quality Settings</label>
+            <label className="text-[10px] uppercase font-bold text-zinc-400 mb-2 block">Quality Settings</label>
             <div className="flex bg-zinc-900 p-1 rounded-lg border border-zinc-800 mb-4">
-              <button onClick={() => setGenerationQuality('fast')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-2 ${generationQuality === 'fast' ? 'bg-zinc-700 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}><i className="fas fa-bolt text-[10px]"></i> Fast Preview</button>
-              <button onClick={() => setGenerationQuality('pro')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-2 ${generationQuality === 'pro' ? 'bg-indigo-600 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'}`}><i className="fas fa-star text-[10px]"></i> Pro Quality</button>
+              <button onClick={() => setGenerationQuality('fast')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-2 ${generationQuality === 'fast' ? 'bg-zinc-700 text-white shadow' : 'text-zinc-400 hover:text-zinc-300'}`}><i className="fas fa-bolt text-[10px]"></i> Fast Preview</button>
+              <button onClick={() => setGenerationQuality('pro')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-2 ${generationQuality === 'pro' ? 'bg-indigo-600 text-white shadow' : 'text-zinc-400 hover:text-zinc-300'}`}><i className="fas fa-star text-[10px]"></i> Pro Quality</button>
             </div>
           </div>
           <div>
-            <label className="text-[10px] uppercase font-bold text-zinc-500 mb-2 block">Actions</label>
+            <label className="text-[10px] uppercase font-bold text-zinc-400 mb-2 block">Actions</label>
             <button onClick={handleGenerateSequence} disabled={!!loadingAction} className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white py-3 rounded-lg text-xs font-black uppercase tracking-widest shadow-lg shadow-indigo-500/20 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2">
               {loadingAction ? <><i className="fas fa-spinner animate-spin"></i> {loadingAction}</> : 'Render Sequence'}
             </button>
-            <p className="text-[10px] text-zinc-500 mt-2 text-center">Mark 2+ Keyframes to create a sequence.</p>
+            <p className="text-[10px] text-zinc-400 mt-2 text-center">Mark 2+ Keyframes to create a sequence.</p>
           </div>
         </div>
         {activeSegment.generatedClips.length > 0 && (
@@ -717,7 +717,7 @@ export const StudioTab: React.FC = () => {
 
       {previewFrame && (
         <div className="fixed inset-0 z-[200] bg-black/95 flex flex-col items-center justify-center p-4 backdrop-blur-xl cursor-default" onClick={() => setPreviewFrame(null)}>
-          <button className="absolute top-6 right-6 text-zinc-500 hover:text-white text-4xl transition-colors z-[210]" onClick={() => setPreviewFrame(null)}><i className="fas fa-times"></i></button>
+          <button className="absolute top-6 right-6 text-zinc-400 hover:text-white text-4xl transition-colors z-[210]" onClick={() => setPreviewFrame(null)}><i className="fas fa-times"></i></button>
           {previewFrame.modifiedDataUrl ? (
             <div className="flex flex-col md:flex-row gap-4 w-full h-full items-center justify-center" onClick={(e) => e.stopPropagation()}>
               <div className="flex-1 flex items-center justify-center h-full">
@@ -726,7 +726,7 @@ export const StudioTab: React.FC = () => {
                   <span className="absolute top-2 left-2 bg-black/60 px-2 py-1 rounded text-[10px] uppercase font-bold text-zinc-400">{previewFrame.cleanedDataUrl ? "Cleaned Source" : "Original Source"}</span>
                 </div>
               </div>
-              <div className="text-zinc-600 hidden md:block"><i className="fas fa-arrow-right text-2xl"></i></div>
+              <div className="text-zinc-400 hidden md:block"><i className="fas fa-arrow-right text-2xl"></i></div>
               <div className="flex-1 flex items-center justify-center h-full">
                 <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden relative w-full h-full flex items-center justify-center">
                   <img src={previewFrame.modifiedDataUrl} className="max-w-full max-h-full object-contain" />
@@ -748,7 +748,7 @@ export const StudioTab: React.FC = () => {
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl flex flex-col gap-4">
             <div className="flex justify-between items-center border-b border-zinc-800 pb-4">
               <h3 className="text-lg font-black uppercase tracking-widest text-white">Modify Single Frame</h3>
-              <button onClick={() => setModifyingFrame(null)} className="text-zinc-500 hover:text-white"><i className="fas fa-times"></i></button>
+              <button onClick={() => setModifyingFrame(null)} className="text-zinc-400 hover:text-white"><i className="fas fa-times"></i></button>
             </div>
             <div className="flex gap-4">
               <div className="w-1/3 aspect-video bg-black rounded-lg overflow-hidden border border-zinc-800 relative">
@@ -757,18 +757,18 @@ export const StudioTab: React.FC = () => {
               </div>
               <div className="flex-1 flex flex-col gap-4">
                 <div>
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase mb-2 block">Prompt</label>
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase mb-2 block">Prompt</label>
                   <textarea value={singleFramePrompt} onChange={(e) => setSingleFramePrompt(e.target.value)} className="w-full bg-black border border-zinc-700 rounded-lg p-3 text-sm text-white focus:border-indigo-500 outline-none resize-none h-24" placeholder="Describe modification..." />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase mb-2 block">Reference (Optional)</label>
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase mb-2 block">Reference (Optional)</label>
                   <div className="flex gap-2 items-center">
                     {singleFrameReference && <img src={singleFrameReference} className="w-10 h-10 rounded object-cover border border-zinc-700" />}
                     <label className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs px-4 py-2 rounded-lg cursor-pointer border border-zinc-700 flex items-center justify-center gap-2">
                       <i className="fas fa-upload"></i> Upload Reference
                       <input type="file" accept="image/*" onChange={handleSingleFrameReferenceUpload} className="hidden" />
                     </label>
-                    {singleFrameReference && <button onClick={() => setSingleFrameReference(null)} className="text-zinc-500 hover:text-red-500 px-2"><i className="fas fa-trash"></i></button>}
+                    {singleFrameReference && <button onClick={() => setSingleFrameReference(null)} className="text-zinc-400 hover:text-red-500 px-2"><i className="fas fa-trash"></i></button>}
                   </div>
                 </div>
               </div>

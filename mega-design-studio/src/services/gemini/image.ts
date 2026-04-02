@@ -1067,3 +1067,50 @@ IMPORTANT COMPOSITION RULES:
         return null;
     }
 };
+
+export const upscaleSymbol = async (image: string, scale: 2 | 3): Promise<string | null> => {
+  // Get original dimensions from the data URL
+  const getImageDimensions = (dataUrl: string): Promise<{w: number, h: number}> =>
+    new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => resolve({ w: img.width, h: img.height });
+      img.src = dataUrl;
+    });
+
+  const { w, h } = await getImageDimensions(image);
+  const targetW = w * scale;
+  const targetH = h * scale;
+
+  const ai = getAI();
+  const { mimeType, data: base64 } = parseDataUrl(image);
+
+  const prompt = `Recreate this game symbol image at exactly ${targetW}×${targetH} pixels.
+Preserve every visual detail, color, shape, style, and texture from the original — do not simplify or change anything.
+Enhance sharpness and clarity. Output must be the full symbol on a white background, same composition, much higher resolution.
+Output dimensions: ${targetW}×${targetH} pixels exactly.`;
+
+  try {
+    const result = await runWithRetry(async () => {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.1-flash-image-preview',
+        contents: [{ role: 'user', parts: [
+          { inlineData: { mimeType, data: base64 } },
+          { text: prompt },
+        ]}],
+        config: {
+          responseModalities: ['IMAGE', 'TEXT'],
+          temperature: 0.1,
+        },
+      });
+      const parts = response?.candidates?.[0]?.content?.parts ?? [];
+      const imgPart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith('image/'));
+      if (!imgPart?.inlineData) throw new Error('No image in response');
+      const raw = `data:${imgPart.inlineData.mimeType};base64,${imgPart.inlineData.data}`;
+      return await resizeToExact(raw, targetW, targetH, '#FFFFFF', 'contain');
+    });
+    return result;
+  } catch (e) {
+    console.error('[upscaleSymbol]', e);
+    return null;
+  }
+};

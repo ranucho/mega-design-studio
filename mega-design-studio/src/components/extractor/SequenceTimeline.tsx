@@ -141,7 +141,7 @@ export const SequenceTimeline: React.FC<SequenceTimelineProps> = ({
       <div className="h-10 border-b border-zinc-800 flex items-center px-4 bg-[#181825] gap-4 justify-between shrink-0">
         <div className="flex items-center gap-2">
           <span className="text-xs font-mono text-red-500 font-bold">{formatTime(globalTime)}</span>
-          <span className="text-xs text-zinc-600">/</span>
+          <span className="text-xs text-zinc-400">/</span>
           <span className="text-xs font-mono text-zinc-400">{formatTime(totalDuration)}</span>
         </div>
         <div className="flex items-center gap-4">
@@ -171,7 +171,7 @@ export const SequenceTimeline: React.FC<SequenceTimelineProps> = ({
         >
           {/* Ruler - matching MovieTab */}
           <div
-            className="h-6 border-b border-zinc-700/50 flex items-end text-[10px] text-zinc-500 select-none bg-[#181825] sticky top-0 z-30"
+            className="h-6 border-b border-zinc-700/50 flex items-end text-[10px] text-zinc-400 select-none bg-[#181825] sticky top-0 z-30"
             onMouseDown={handleRulerMouseDown}
           >
             {Array.from({ length: Math.ceil(Math.max(10, totalDuration) / 5) + 5 }).map((_, i) => (
@@ -207,10 +207,10 @@ export const SequenceTimeline: React.FC<SequenceTimelineProps> = ({
               }
             }}
           >
-            <div className="absolute -left-14 top-8 text-[10px] font-bold text-zinc-500 w-10 text-right">V1</div>
+            <div className="absolute -left-14 top-8 text-[10px] font-bold text-zinc-400 w-10 text-right">V1</div>
 
             {clipLayouts.length === 0 && (
-              <div className="absolute top-0 left-0 h-full w-[500px] flex items-center justify-center border-2 border-dashed border-zinc-700 rounded-lg bg-zinc-800/30 text-zinc-500 gap-3 pointer-events-none">
+              <div className="absolute top-0 left-0 h-full w-[500px] flex items-center justify-center border-2 border-dashed border-zinc-700 rounded-lg bg-zinc-800/30 text-zinc-400 gap-3 pointer-events-none">
                 No clips yet
               </div>
             )}

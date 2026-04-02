@@ -86,7 +86,7 @@ export const BannerReskinPanel: React.FC = () => {
                 alt="Source banner"
                 className="w-full h-auto"
               />
-              <div className="px-3 py-2 border-t border-zinc-700/50 text-xs text-zinc-500">
+              <div className="px-3 py-2 border-t border-zinc-700/50 text-xs text-zinc-400">
                 Original — {project.sourceWidth}x{project.sourceHeight}
               </div>
             </div>
@@ -113,7 +113,7 @@ export const BannerReskinPanel: React.FC = () => {
               <i className="fa-solid fa-user mr-2 text-blue-400" />
               Character Reference (optional)
             </label>
-            <p className="text-xs text-zinc-500 mb-3">
+            <p className="text-xs text-zinc-400 mb-3">
               Upload a reference image for the new character, or leave empty to auto-generate
             </p>
             <div className="flex gap-3 items-start">
@@ -130,7 +130,7 @@ export const BannerReskinPanel: React.FC = () => {
               ) : (
                 <button
                   onClick={() => charInputRef.current?.click()}
-                  className="w-24 h-24 rounded-lg border-2 border-dashed border-zinc-700 hover:border-zinc-500 flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-zinc-300 transition-colors"
+                  className="w-24 h-24 rounded-lg border-2 border-dashed border-zinc-700 hover:border-zinc-500 flex flex-col items-center justify-center gap-1 text-zinc-400 hover:text-zinc-300 transition-colors"
                 >
                   <i className="fa-solid fa-plus" />
                   <span className="text-[9px]">Upload</span>
@@ -171,10 +171,10 @@ export const BannerReskinPanel: React.FC = () => {
               <div className="flex flex-col gap-2">
                 {detectedTexts.map(dt => (
                   <div key={dt.id} className="flex items-center gap-2">
-                    <span className="text-xs text-zinc-500 w-28 truncate shrink-0" title={dt.label}>
+                    <span className="text-xs text-zinc-400 w-28 truncate shrink-0" title={dt.label}>
                       {dt.label}:
                     </span>
-                    <span className="text-xs text-zinc-600 w-32 truncate shrink-0">"{dt.text}"</span>
+                    <span className="text-xs text-zinc-400 w-32 truncate shrink-0">"{dt.text}"</span>
                     <i className="fa-solid fa-arrow-right text-[8px] text-zinc-700" />
                     <input
                       type="text"
@@ -220,7 +220,7 @@ export const BannerReskinPanel: React.FC = () => {
           className={`px-6 py-2.5 text-sm font-medium rounded-lg transition-all shadow-lg ${
             config.theme.trim() && !isGenerating
               ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-purple-600/20'
-              : 'bg-zinc-700 text-zinc-500 cursor-not-allowed shadow-none'
+              : 'bg-zinc-700 text-zinc-400 cursor-not-allowed shadow-none'
           }`}
         >
           {isGenerating ? (
