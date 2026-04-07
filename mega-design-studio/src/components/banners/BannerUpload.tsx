@@ -1,17 +1,12 @@
 import React, { useRef, useState, useCallback } from 'react';
 import { useBanner } from '@/contexts/BannerContext';
-import { BannerLuckyReskin } from './BannerLuckyReskin';
-import { BannerMode } from '@/types';
 
 export const BannerUpload: React.FC = () => {
-  const { project, initProject, setStage, resetProject } = useBanner();
+  const { project, initProject, setStage, setProject, resetProject } = useBanner();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [mode, setMode] = useState<BannerMode>('resize');
-  const [showLuckyReskin, setShowLuckyReskin] = useState(false);
   const [showBeforeAfter, setShowBeforeAfter] = useState(false);
 
-  const hasCompositions = (project?.compositions?.length ?? 0) > 0;
   const isReskinned = !!project?.originalImage;
 
   const handleFile = useCallback((file: File) => {
@@ -21,12 +16,12 @@ export const BannerUpload: React.FC = () => {
       const dataUrl = reader.result as string;
       const img = new Image();
       img.onload = () => {
-        initProject(dataUrl, img.naturalWidth, img.naturalHeight, mode);
+        initProject(dataUrl, img.naturalWidth, img.naturalHeight, 'resize');
       };
       img.src = dataUrl;
     };
     reader.readAsDataURL(file);
-  }, [initProject, mode]);
+  }, [initProject]);
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -97,63 +92,50 @@ export const BannerUpload: React.FC = () => {
           </div>
         )}
 
-        {/* Mode selector */}
-        <div className="flex gap-2 bg-zinc-900 rounded-lg p-1 border border-zinc-700">
-          <button
-            onClick={() => setMode('resize')}
-            className={`px-4 py-2 text-sm rounded-md transition-all ${
-              mode === 'resize'
-                ? 'bg-cyan-600 text-white shadow'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <i className="fa-solid fa-arrows-left-right-to-line mr-2" />
-            Resize & Adapt
-          </button>
-          <button
-            onClick={() => setMode('reskin')}
-            className={`px-4 py-2 text-sm rounded-md transition-all ${
-              mode === 'reskin'
-                ? 'bg-purple-600 text-white shadow'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <i className="fa-solid fa-palette mr-2" />
-            Reskin
-          </button>
+        {/* Project name */}
+        <div className="w-full max-w-md flex items-center gap-3">
+          <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider shrink-0">
+            Project Name
+          </label>
+          <input
+            type="text"
+            value={project.name}
+            onChange={e => setProject(prev => prev ? { ...prev, name: e.target.value } : null)}
+            placeholder="banner-project"
+            className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-cyan-500 focus:outline-none transition-colors"
+          />
         </div>
 
+        {/* Actions — single row, 3 clear options */}
         <div className="flex gap-3">
           <button
             onClick={() => resetProject()}
-            className="px-4 py-2 text-sm text-zinc-400 hover:text-white border border-zinc-700 rounded-lg transition-colors"
+            className="px-4 py-2.5 text-sm text-zinc-400 hover:text-white border border-zinc-700 rounded-lg transition-colors"
           >
+            <i className="fa-solid fa-image mr-2" />
             Choose Different Image
           </button>
-          {hasCompositions && (
-            <button
-              onClick={() => setShowLuckyReskin(true)}
-              className="px-5 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-all shadow-lg shadow-purple-600/20 flex items-center gap-1.5"
-            >
-              <i className="fa-solid fa-palette" />
-              Reskin
-            </button>
-          )}
           <button
-            onClick={() => setStage(mode === 'reskin' ? 'reskin' : 'extract')}
-            className={`px-6 py-2 text-sm font-medium text-white rounded-lg transition-colors shadow-lg ${
-              mode === 'reskin'
-                ? 'bg-purple-600 hover:bg-purple-500 shadow-purple-600/20'
-                : 'bg-cyan-600 hover:bg-cyan-500 shadow-cyan-600/20'
-            }`}
+            onClick={() => {
+              setProject(prev => prev ? { ...prev, mode: 'resize' } : null);
+              setStage('extract');
+            }}
+            className="px-5 py-2.5 text-sm font-medium bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-all shadow-lg shadow-cyan-600/20 flex items-center gap-2"
           >
-            Continue
-            <i className="fa-solid fa-arrow-right ml-2" />
+            <i className="fa-solid fa-arrows-left-right-to-line" />
+            Resize & Adapt
+          </button>
+          <button
+            onClick={() => {
+              setProject(prev => prev ? { ...prev, mode: 'reskin' } : null);
+              setStage('reskin');
+            }}
+            className="px-5 py-2.5 text-sm font-medium bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-all shadow-lg shadow-purple-600/20 flex items-center gap-2"
+          >
+            <i className="fa-solid fa-palette" />
+            Reskin
           </button>
         </div>
-        {showLuckyReskin && (
-          <BannerLuckyReskin onClose={() => setShowLuckyReskin(false)} />
-        )}
       </div>
     );
   }

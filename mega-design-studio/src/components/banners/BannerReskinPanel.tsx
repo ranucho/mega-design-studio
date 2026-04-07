@@ -7,6 +7,7 @@ interface ReskinConfig {
   characterRef: string | null;
   palette: string;
   textChanges: Record<string, string>;
+  negativePrompts?: string;
 }
 
 export const BannerReskinPanel: React.FC = () => {
@@ -19,6 +20,7 @@ export const BannerReskinPanel: React.FC = () => {
   });
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showNegative, setShowNegative] = useState(false);
   const charInputRef = useRef<HTMLInputElement>(null);
 
   // Collect detected text from extracted elements
@@ -40,8 +42,12 @@ export const BannerReskinPanel: React.FC = () => {
     setError(null);
 
     try {
+      const themeWithNegatives = config.negativePrompts?.trim()
+        ? `${config.theme}\n\nNEGATIVE PROMPTS (avoid these): ${config.negativePrompts.trim()}`
+        : config.theme;
+
       const reskinned = await reskinBanner(project.sourceImage, {
-        theme: config.theme,
+        theme: themeWithNegatives,
         characterRef: config.characterRef || undefined,
         palette: config.palette || undefined,
         textChanges: Object.keys(config.textChanges).length > 0 ? config.textChanges : undefined,
@@ -105,6 +111,34 @@ export const BannerReskinPanel: React.FC = () => {
               placeholder="e.g. Norse mythology, Underwater kingdom, Cyberpunk city, Ancient Egypt..."
               className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-zinc-500 focus:border-purple-500 focus:outline-none transition-colors"
             />
+          </div>
+
+          {/* Negative Prompts */}
+          <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
+            <button
+              onClick={() => setShowNegative(v => !v)}
+              className="w-full flex items-center justify-between text-sm font-semibold text-zinc-300 hover:text-white transition-colors"
+            >
+              <span>
+                <i className="fa-solid fa-ban mr-2 text-red-400" />
+                Negative Prompts (optional)
+              </span>
+              <i className={`fa-solid ${showNegative ? 'fa-chevron-up' : 'fa-chevron-down'} text-xs text-zinc-500`} />
+            </button>
+            {showNegative && (
+              <div className="mt-3">
+                <p className="text-xs text-zinc-400 mb-2">
+                  Things the AI should avoid in the reskin
+                </p>
+                <textarea
+                  value={config.negativePrompts ?? ''}
+                  onChange={e => setConfig(prev => ({ ...prev, negativePrompts: e.target.value }))}
+                  placeholder="e.g. dollar signs, actual banknotes, violence, text artifacts..."
+                  rows={3}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-zinc-500 focus:border-red-500 focus:outline-none transition-colors resize-none"
+                />
+              </div>
+            )}
           </div>
 
           {/* Character Reference */}

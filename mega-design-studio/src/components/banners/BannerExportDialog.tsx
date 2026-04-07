@@ -139,7 +139,7 @@ const checkQuality = (comp: BannerComposition): QualityWarning[] => {
 };
 
 export const BannerExportDialog: React.FC = () => {
-  const { project, setStage, updateComposition } = useBanner();
+  const { project, setStage, setProject, updateComposition } = useBanner();
   const [format, setFormat] = useState<ExportFormat>('png');
   const [quality, setQuality] = useState(90);
   const [isExporting, setIsExporting] = useState(false);
@@ -148,6 +148,16 @@ export const BannerExportDialog: React.FC = () => {
   const [hasChecked, setHasChecked] = useState(false);
 
   const compositions = project?.compositions.filter(c => c.status !== 'pending' && c.layers.length > 0) ?? [];
+
+  const projectName = (() => {
+    const raw = (project?.name || 'banner').toString();
+    return raw
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') || 'banner';
+  })();
 
   // Run quality checks on all compositions
   const runQualityCheck = useCallback(() => {
@@ -205,7 +215,7 @@ export const BannerExportDialog: React.FC = () => {
           ? await dataUrlToBlob(comp.sparkleDataUrl, format, quality)
           : await renderCompositionToBlob(comp, format, quality);
         const ext = format === 'jpeg' ? 'jpg' : format;
-        const filename = `${comp.presetKey}_${comp.width}x${comp.height}.${ext}`;
+        const filename = `${projectName}_${comp.width}x${comp.height}.${ext}`;
         folder.file(filename, blob);
         setExportProgress(((i + 1) / compositions.length) * 100);
       }
@@ -214,7 +224,7 @@ export const BannerExportDialog: React.FC = () => {
       const url = URL.createObjectURL(zipBlob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `banners_${compositions.length}sizes.zip`;
+      a.download = `${projectName}_banners.zip`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err: any) {
@@ -222,7 +232,7 @@ export const BannerExportDialog: React.FC = () => {
     } finally {
       setIsExporting(false);
     }
-  }, [compositions, format, quality]);
+  }, [compositions, format, quality, projectName, dataUrlToBlob]);
 
   // Export single composition
   const handleExportSingle = useCallback(async (comp: BannerComposition) => {
@@ -234,13 +244,13 @@ export const BannerExportDialog: React.FC = () => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${comp.presetKey}_${comp.width}x${comp.height}.${ext}`;
+      a.download = `${projectName}_${comp.width}x${comp.height}.${ext}`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err: any) {
       console.error('Export failed:', err);
     }
-  }, [format, quality]);
+  }, [format, quality, projectName, dataUrlToBlob]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -252,6 +262,24 @@ export const BannerExportDialog: React.FC = () => {
             <p className="text-zinc-400 text-sm">
               {compositions.length} composition{compositions.length !== 1 ? 's' : ''} ready for export
             </p>
+          </div>
+
+          {/* Project Name — used as export filename prefix */}
+          <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
+            <label className="text-xs text-zinc-400 block mb-1.5">
+              <i className="fa-solid fa-tag mr-1.5" />
+              Project Name <span className="text-zinc-600">(used for filenames)</span>
+            </label>
+            <input
+              type="text"
+              value={project?.name ?? ''}
+              onChange={e => setProject(prev => prev ? { ...prev, name: e.target.value } : null)}
+              placeholder="banner-project"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-cyan-500 focus:outline-none transition-colors"
+            />
+            <div className="text-[10px] text-zinc-500 mt-1.5 font-mono">
+              Files: <span className="text-cyan-400/80">{projectName}_WxH.{format === 'jpeg' ? 'jpg' : format}</span> &nbsp;·&nbsp; Zip: <span className="text-cyan-400/80">{projectName}_banners.zip</span>
+            </div>
           </div>
 
           {/* Format & Quality */}

@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { useBanner } from '@/contexts/BannerContext';
 import { useApp } from '@/contexts/AppContext';
 import { analyzeBanner, canvasCropElement, extractElement, cropImageToRegion, modifyImage, whiteToAlpha, autoTrimTransparent } from '@/services/gemini';
+import { generateShortCtaVariant, generateMultilineTextVariant } from '@/services/gemini/element-variants';
 import { parallelBatch } from '@/services/parallelBatch';
 import { ExtractedElement, BannerLayer, DetectedElement, ROLE_TO_CATEGORY, CATEGORY_META, type ElementCategory } from '@/types';
 import { useToast } from '@/components/shared/Toast';
@@ -577,6 +578,10 @@ Output: A clean, full-body character on pure white background that matches EXACT
         toast(`Extracted ${detected.length} elements`, { type: 'success' });
       }
 
+      // Auto-generate short-text CTA + 2-line headline variants for any new elements that need them.
+      // Runs after bulk extraction; only creates variants that don't already exist.
+      setTimeout(() => { generateVariantsForAll().catch(console.error); }, 200);
+
       // Auto-update existing compositions after re-extraction (e.g. after reskin)
       // Uses a longer timeout to ensure all React state batches have flushed
       setTimeout(() => {
@@ -587,11 +592,22 @@ Output: A clean, full-body character on pure white background that matches EXACT
           const updatedComps = currentProj.compositions.map(comp => {
             let layersChanged = false;
             const newLayers = comp.layers.map(layer => {
-              // Match by name (label) — case-insensitive, trimmed
-              const layerName = layer.name.trim().toLowerCase();
-              const newEl = newEls.find(e => e.label.trim().toLowerCase() === layerName);
+              // Find corresponding element — prefer id match (derived text layers), then label match
+              let newEl = layer.shortenedFromElementId
+                ? newEls.find(e => e.id === layer.shortenedFromElementId)
+                : undefined;
+              if (!newEl) {
+                const stripped = layer.name.replace(/ \(shortened\)$/i, '').trim().toLowerCase();
+                newEl = newEls.find(e => e.label.trim().toLowerCase() === stripped);
+              }
               if (!newEl) return layer;
-              // Always update src even if dimensions match — the image content may have changed after reskin
+              // Text layers: refresh text content only
+              if (layer.type === 'text') {
+                if (!newEl.detectedText || newEl.detectedText === layer.text) return layer;
+                layersChanged = true;
+                return { ...layer, text: newEl.detectedText };
+              }
+              // Image layers: refresh src + scale
               if (newEl.dataUrl === layer.src) return layer;
               layersChanged = true;
               const scaleAdj = layer.nativeWidth > 0 && newEl.nativeWidth > 0
@@ -617,7 +633,68 @@ Output: A clean, full-body character on pure white background that matches EXACT
   const retrySingleElement = useCallback(async (elementId: string) => {
     if (!project?.sourceImage) return;
     const existing = project.extractedElements.find(e => e.id === elementId);
-    if (!existing || !existing.sourceBbox) return;
+    if (!existing) return;
+
+    // ── VARIANT RETRY: regenerate the AI variant from its parent element ──
+    if (existing.variantOfId) {
+      const parent = project.extractedElements.find(e => e.id === existing.variantOfId);
+      if (!parent || !parent.detectedText) return;
+
+      setRetryingElementIds(prev => new Set(prev).add(elementId));
+      try {
+        let result: { dataUrl: string; nativeWidth: number; nativeHeight: number; detectedText: string } | null = null;
+        if (existing.variantKind === 'short') {
+          result = await generateShortCtaVariant(parent.dataUrl, parent.detectedText);
+        } else if (existing.variantKind === 'multiline') {
+          result = await generateMultilineTextVariant(parent.dataUrl, parent.detectedText);
+        }
+        if (result) {
+          setProject(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              extractedElements: prev.extractedElements.map(e =>
+                e.id === elementId
+                  ? { ...e, dataUrl: result!.dataUrl, nativeWidth: result!.nativeWidth, nativeHeight: result!.nativeHeight, detectedText: result!.detectedText, isGeneratingVariant: false }
+                  : e
+              ),
+            };
+          });
+          // Update compositions that use this variant
+          if (project.compositions.length > 0) {
+            for (const comp of project.compositions) {
+              const layerToUpdate = comp.layers.find(l => l.src === existing.dataUrl || l.name === existing.label);
+              if (layerToUpdate) {
+                const scaleAdj = (layerToUpdate.nativeWidth * layerToUpdate.scaleX) / result.nativeWidth;
+                updateComposition(comp.id, {
+                  layers: comp.layers.map(l =>
+                    l.id === layerToUpdate.id
+                      ? { ...l, src: result!.dataUrl, nativeWidth: result!.nativeWidth, nativeHeight: result!.nativeHeight, scaleX: scaleAdj, scaleY: scaleAdj }
+                      : l
+                  ),
+                  sparkleDataUrl: undefined,
+                });
+              }
+            }
+          }
+          toast(`Regenerated "${existing.label}"`, { type: 'success' });
+        } else {
+          toast(`Regeneration failed for "${existing.label}"`, { type: 'error' });
+        }
+      } catch (err: any) {
+        toast(`Retry failed for "${existing.label}": ${err.message}`, { type: 'error' });
+      } finally {
+        setRetryingElementIds(prev => {
+          const next = new Set(prev);
+          next.delete(elementId);
+          return next;
+        });
+      }
+      return;
+    }
+
+    // ── REGULAR ELEMENT RETRY: re-extract from source image ──
+    if (!existing.sourceBbox) return;
 
     // Build a DetectedElement from the existing extracted element's metadata
     const detectedEl: DetectedElement = {
@@ -649,19 +726,35 @@ Output: A clean, full-body character on pure white background that matches EXACT
       const updatedEl = { ...newExtracted, id: elementId };
       if (project.compositions.length > 0) {
         for (const comp of project.compositions) {
+          // Match: image layer by src/name, OR text layer derived from this element
           const layerToUpdate = comp.layers.find(l =>
-            l.src === existing.dataUrl || l.name === existing.label
+            l.shortenedFromElementId === elementId ||
+            l.src === existing.dataUrl ||
+            (l.name === existing.label && l.type === 'image') ||
+            (l.name === `${existing.label} (shortened)`)
           );
           if (layerToUpdate) {
-            const scaleAdj = (layerToUpdate.nativeWidth * layerToUpdate.scaleX) / updatedEl.nativeWidth;
-            updateComposition(comp.id, {
-              layers: comp.layers.map(l =>
-                l.id === layerToUpdate.id
-                  ? { ...l, src: updatedEl.dataUrl, nativeWidth: updatedEl.nativeWidth, nativeHeight: updatedEl.nativeHeight, scaleX: scaleAdj, scaleY: scaleAdj }
-                  : l
-              ),
-              sparkleDataUrl: undefined,
-            });
+            if (layerToUpdate.type === 'text') {
+              // Text CTA — keep position but refresh text content from new detected text
+              updateComposition(comp.id, {
+                layers: comp.layers.map(l =>
+                  l.id === layerToUpdate.id
+                    ? { ...l, text: updatedEl.detectedText || l.text }
+                    : l
+                ),
+                sparkleDataUrl: undefined,
+              });
+            } else {
+              const scaleAdj = (layerToUpdate.nativeWidth * layerToUpdate.scaleX) / updatedEl.nativeWidth;
+              updateComposition(comp.id, {
+                layers: comp.layers.map(l =>
+                  l.id === layerToUpdate.id
+                    ? { ...l, src: updatedEl.dataUrl, nativeWidth: updatedEl.nativeWidth, nativeHeight: updatedEl.nativeHeight, scaleX: scaleAdj, scaleY: scaleAdj }
+                    : l
+                ),
+                sparkleDataUrl: undefined,
+              });
+            }
           }
         }
       }
@@ -816,9 +909,15 @@ Output: A clean, full-body character on pure white background.`;
           if (project.compositions.length > 0) {
             for (const comp of project.compositions) {
               const layerToUpdate = comp.layers.find(l =>
-                l.src === oldDataUrl || l.name === editingElement.label
+                l.shortenedFromElementId === editingElement.id ||
+                l.src === oldDataUrl ||
+                (l.name === editingElement.label && l.type === 'image')
               );
               if (layerToUpdate) {
+                if (layerToUpdate.type === 'text') {
+                  // text layer — no image update needed
+                  continue;
+                }
                 const scaleAdj = (layerToUpdate.nativeWidth * layerToUpdate.scaleX) / img.naturalWidth;
                 updateComposition(comp.id, {
                   layers: comp.layers.map(l =>
@@ -889,6 +988,112 @@ Output: A clean, full-body character on pure white background.`;
       });
     }
   }, [project?.sourceImage, project?.extractedElements, setProject, extractSingleElement, saveToAssets]);
+
+  // ── Variant generation ────────────────────────────────────────
+  // For each CTA with detected text > 1 word, AI-generates a short-text variant.
+  // For each text element > 3 words, AI-generates a 2-line variant.
+  const [isGeneratingVariants, setIsGeneratingVariants] = useState(false);
+  const projectRefForVariants = useRef(project);
+  projectRefForVariants.current = project;
+  const generateVariantsForAll = useCallback(async () => {
+    const currentProject = projectRefForVariants.current;
+    if (!currentProject) return;
+    // Find eligible parents (CTAs with >1 word, text with >=3 words)
+    const existing = currentProject.extractedElements;
+
+    const ctaTargets = existing.filter(e =>
+      !e.variantOfId && e.role === 'cta' && e.detectedText && e.detectedText.trim().split(/\s+/).length > 1
+    );
+    const textTargets = existing.filter(e =>
+      !e.variantOfId && (e.role === 'text' || e.role === 'other') && e.detectedText && e.detectedText.trim().split(/\s+/).length >= 3
+    );
+    if (ctaTargets.length === 0 && textTargets.length === 0) {
+      toast('No eligible elements for variants.', { type: 'info' });
+      return;
+    }
+
+    // Remove any existing variants so we regenerate fresh
+    setProject(prev => prev ? {
+      ...prev,
+      extractedElements: prev.extractedElements.filter(e => !e.variantOfId),
+    } : null);
+
+    setIsGeneratingVariants(true);
+    try {
+      // CTAs: short variant
+      for (const parent of ctaTargets) {
+        const placeholderId = crypto.randomUUID();
+        setProject(prev => prev ? {
+          ...prev,
+          extractedElements: [...prev.extractedElements, {
+            id: placeholderId,
+            dataUrl: parent.dataUrl,
+            role: parent.role,
+            label: `${parent.label} (short)`,
+            nativeWidth: parent.nativeWidth,
+            nativeHeight: parent.nativeHeight,
+            detectedText: parent.detectedText,
+            variantOfId: parent.id,
+            variantKind: 'short',
+            isGeneratingVariant: true,
+          }],
+        } : null);
+        const result = await generateShortCtaVariant(parent.dataUrl, parent.detectedText!);
+        setProject(prev => {
+          if (!prev) return null;
+          if (!result) {
+            // Drop the placeholder on failure
+            return { ...prev, extractedElements: prev.extractedElements.filter(e => e.id !== placeholderId) };
+          }
+          return {
+            ...prev,
+            extractedElements: prev.extractedElements.map(e =>
+              e.id === placeholderId
+                ? { ...e, dataUrl: result.dataUrl, nativeWidth: result.nativeWidth, nativeHeight: result.nativeHeight, detectedText: result.detectedText, isGeneratingVariant: false }
+                : e
+            ),
+          };
+        });
+      }
+      // Text: 2-line variant
+      for (const parent of textTargets) {
+        const placeholderId = crypto.randomUUID();
+        setProject(prev => prev ? {
+          ...prev,
+          extractedElements: [...prev.extractedElements, {
+            id: placeholderId,
+            dataUrl: parent.dataUrl,
+            role: parent.role,
+            label: `${parent.label} (2-line)`,
+            nativeWidth: parent.nativeWidth,
+            nativeHeight: parent.nativeHeight,
+            detectedText: parent.detectedText,
+            variantOfId: parent.id,
+            variantKind: 'multiline',
+            isGeneratingVariant: true,
+          }],
+        } : null);
+        const result = await generateMultilineTextVariant(parent.dataUrl, parent.detectedText!);
+        setProject(prev => {
+          if (!prev) return null;
+          if (!result) {
+            return { ...prev, extractedElements: prev.extractedElements.filter(e => e.id !== placeholderId) };
+          }
+          return {
+            ...prev,
+            extractedElements: prev.extractedElements.map(e =>
+              e.id === placeholderId
+                ? { ...e, dataUrl: result.dataUrl, nativeWidth: result.nativeWidth, nativeHeight: result.nativeHeight, detectedText: result.detectedText, isGeneratingVariant: false }
+                : e
+            ),
+          };
+        });
+      }
+      toast(`Generated ${ctaTargets.length} short CTA + ${textTargets.length} 2-line text variant(s)`, { type: 'success' });
+    } finally {
+      setIsGeneratingVariants(false);
+    }
+  }, [project, setProject, toast]);
 
   if (!project) return null;
 
@@ -1201,9 +1406,23 @@ Output: A clean, full-body character on pure white background.`;
           {/* Extracted elements grid with per-element actions */}
           {extractedElements.length > 0 && (
             <div>
-              <h3 className="text-sm font-semibold text-zinc-300 mb-3">
-                Extracted Elements ({extractedElements.length})
-              </h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-zinc-300">
+                  Extracted Elements ({extractedElements.length})
+                </h3>
+                <button
+                  onClick={generateVariantsForAll}
+                  disabled={isGeneratingVariants || isExtracting}
+                  className="px-3 py-1.5 text-[11px] font-medium rounded-md bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-600/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                  title="AI-generates short-text CTA variants and 2-line headline variants for use on narrow/tall banners. Click again to regenerate."
+                >
+                  {isGeneratingVariants ? (
+                    <><i className="fa-solid fa-spinner fa-spin" /> Generating variants...</>
+                  ) : (
+                    <><i className="fa-solid fa-layer-group" /> {extractedElements.some(e => e.variantOfId) ? 'Regenerate' : 'Generate'} Short CTA + 2-Line Headline variants</>
+                  )}
+                </button>
+              </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                 {extractedElements.map((el) => {
                   const isRetrying = retryingElementIds.has(el.id);
@@ -1263,12 +1482,26 @@ Output: A clean, full-body character on pure white background.`;
                         )}
 
                         {/* Role badge */}
-                        <div className="absolute top-1 left-1">
+                        <div className="absolute top-1 left-1 flex gap-1">
                           <div className="text-[8px] font-black px-1.5 py-0.5 rounded shadow uppercase"
                             style={{ backgroundColor: ROLE_COLORS[el.role], color: 'white' }}>
                             {el.role}
                           </div>
+                          {el.variantKind && (
+                            <div className="text-[8px] font-black px-1.5 py-0.5 rounded shadow uppercase bg-emerald-600 text-white">
+                              {el.variantKind === 'short' ? 'SHORT' : '2-LINE'}
+                            </div>
+                          )}
                         </div>
+                        {/* Variant generating overlay */}
+                        {el.isGeneratingVariant && (
+                          <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-10">
+                            <div className="flex flex-col items-center gap-1.5">
+                              <i className="fa-solid fa-spinner fa-spin text-emerald-400 text-lg" />
+                              <span className="text-[9px] text-emerald-300 uppercase">Generating {el.variantKind}</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Info bar */}

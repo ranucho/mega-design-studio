@@ -376,6 +376,7 @@ export function loadBannerSkinIntoProject(
     // Build project from skin data — ensure ALL required BannerProject fields are present
     return {
       id: prev?.id || crypto.randomUUID(),
+      name: prev?.name || skin.name || `banner-${new Date().toISOString().slice(0, 10)}`,
       sourceImage: skin.sourceImage,
       originalImage: prev?.originalImage || undefined,
       sourceWidth: skin.sourceWidth,

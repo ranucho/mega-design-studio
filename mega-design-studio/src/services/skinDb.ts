@@ -1,4 +1,5 @@
 import type { SlotSkin, BannerSkin, SkinIndexEntry } from '@/types/shared';
+import { saveSlotSkinToFile, saveBannerSkinToFile, deleteSlotSkinFromFile, deleteBannerSkinFromFile } from '@/services/skinFileSync';
 
 const DB_NAME = 'megastudio-skins';
 const DB_VERSION = 1;
@@ -59,16 +60,32 @@ async function remove(store: string, id: string): Promise<void> {
 }
 
 // --- Slot Skins ---
-export const putSlotSkin = (skin: SlotSkin) => put<SlotSkin>(SLOT_STORE, skin);
+export const putSlotSkin = (skin: SlotSkin) => {
+  const result = put<SlotSkin>(SLOT_STORE, skin);
+  saveSlotSkinToFile(skin).catch(console.error);
+  return result;
+};
 export const getSlotSkin = (id: string) => get<SlotSkin>(SLOT_STORE, id);
 export const getAllSlotSkins = () => getAll<SlotSkin>(SLOT_STORE);
-export const removeSlotSkin = (id: string) => remove(SLOT_STORE, id);
+export const removeSlotSkin = (id: string) => {
+  const result = remove(SLOT_STORE, id);
+  deleteSlotSkinFromFile(id).catch(console.error);
+  return result;
+};
 
 // --- Banner Skins ---
-export const putBannerSkin = (skin: BannerSkin) => put<BannerSkin>(BANNER_STORE, skin);
+export const putBannerSkin = (skin: BannerSkin) => {
+  const result = put<BannerSkin>(BANNER_STORE, skin);
+  saveBannerSkinToFile(skin).catch(console.error);
+  return result;
+};
 export const getBannerSkin = (id: string) => get<BannerSkin>(BANNER_STORE, id);
 export const getAllBannerSkins = () => getAll<BannerSkin>(BANNER_STORE);
-export const removeBannerSkin = (id: string) => remove(BANNER_STORE, id);
+export const removeBannerSkin = (id: string) => {
+  const result = remove(BANNER_STORE, id);
+  deleteBannerSkinFromFile(id).catch(console.error);
+  return result;
+};
 
 // --- Index helpers (localStorage for fast dropdown population) ---
 const SLOT_INDEX_KEY = 'megastudio_slot_skin_index';

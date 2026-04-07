@@ -28,6 +28,8 @@ export const BannerCanvas: React.FC<BannerCanvasProps> = ({ composition }) => {
     startW: number; startH: number;
     mode: HandleType;
     startRotation?: number;
+    /** Start positions of all multi-selected layers (for group move) */
+    multiStarts?: Array<{ id: string; x: number; y: number }>;
   } | null>(null);
   const [showSafeZone, setShowSafeZone] = useState(false);
 
@@ -60,21 +62,29 @@ export const BannerCanvas: React.FC<BannerCanvasProps> = ({ composition }) => {
 
   // viewScale: fit composition into the canvas container
   const containerRef = useRef<HTMLDivElement>(null);
-  const [viewScale, setViewScale] = useState(0); // Start at 0 to avoid flash at wrong scale
+  const [viewScale, setViewScale] = useState(0);
 
+  // Compute scale immediately when composition size changes (no animation delay)
+  const computeScale = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const { width, height } = el.getBoundingClientRect();
+    const padded = { w: width - 40, h: height - 40 };
+    const s = Math.min(padded.w / composition.width, padded.h / composition.height, 1);
+    setViewScale(s);
+  }, [composition.width, composition.height]);
+
+  // Recompute immediately on composition change
+  useEffect(() => { computeScale(); }, [computeScale]);
+
+  // Also track container resize
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(entries => {
-      const { width, height } = entries[0].contentRect;
-      // Leave some padding so handles outside canvas are visible
-      const padded = { w: width - 40, h: height - 40 };
-      const s = Math.min(padded.w / composition.width, padded.h / composition.height, 1);
-      setViewScale(s);
-    });
+    const ro = new ResizeObserver(() => computeScale());
     ro.observe(el);
     return () => ro.disconnect();
-  }, [composition.width, composition.height]);
+  }, [computeScale]);
 
   // Preload images (re-load when src changes, e.g. after skin switch)
   useEffect(() => {
@@ -163,16 +173,22 @@ export const BannerCanvas: React.FC<BannerCanvasProps> = ({ composition }) => {
     return { wx: (clientX - rect.left) / viewScale, wy: (clientY - rect.top) / viewScale };
   }, [viewScale]);
 
-  const hitTest = useCallback((wx: number, wy: number): BannerLayer | null => {
+  /** Return ALL layers under the point, topmost first */
+  const hitTestAll = useCallback((wx: number, wy: number): BannerLayer[] => {
+    const hits: BannerLayer[] = [];
     for (let i = layers.length - 1; i >= 0; i--) {
       const l = layers[i];
       if (!l.visible || l.locked) continue;
       const dw = l.nativeWidth * l.scaleX;
       const dh = l.nativeHeight * l.scaleY;
-      if (wx >= l.x && wx <= l.x + dw && wy >= l.y && wy <= l.y + dh) return l;
+      if (wx >= l.x && wx <= l.x + dw && wy >= l.y && wy <= l.y + dh) hits.push(l);
     }
-    return null;
+    return hits;
   }, [layers]);
+
+  const hitTest = useCallback((wx: number, wy: number): BannerLayer | null => {
+    return hitTestAll(wx, wy)[0] ?? null;
+  }, [hitTestAll]);
 
   // Handle start from DOM overlay (handles) or canvas (move/select)
   const handleOverlayDown = useCallback((e: React.PointerEvent, mode: HandleType) => {
@@ -202,24 +218,65 @@ export const BannerCanvas: React.FC<BannerCanvasProps> = ({ composition }) => {
 
   const handleCanvasDown = useCallback((e: React.MouseEvent) => {
     const { wx, wy } = canvasToWorld(e.clientX, e.clientY);
-    const hit = hitTest(wx, wy);
-    if (hit) {
-      updateComposition(composition.id, { selectedLayerId: hit.id });
-      pushUndo();
-      const dw = hit.nativeWidth * hit.scaleX;
-      const dh = hit.nativeHeight * hit.scaleY;
-      setDragState({
-        layerId: hit.id,
-        startX: e.clientX, startY: e.clientY,
-        startLX: hit.x, startLY: hit.y,
-        startScaleX: hit.scaleX, startScaleY: hit.scaleY,
-        startW: dw, startH: dh,
-        mode: 'move',
-      });
-    } else {
-      updateComposition(composition.id, { selectedLayerId: null });
+    const allHits = hitTestAll(wx, wy);
+
+    if (allHits.length === 0) {
+      updateComposition(composition.id, { selectedLayerId: null, selectedLayerIds: [] });
+      return;
     }
-  }, [canvasToWorld, hitTest, pushUndo, updateComposition, composition.id]);
+
+    const currentIds = composition.selectedLayerIds ?? [];
+
+    if (e.shiftKey) {
+      // Shift+click: cycle through overlapping layers to find the next un-selected one.
+      // If all overlapping are already selected, deselect the topmost.
+      const unselected = allHits.find(h => !currentIds.includes(h.id));
+      if (unselected) {
+        // Add unselected layer to multi-selection
+        updateComposition(composition.id, {
+          selectedLayerId: unselected.id,
+          selectedLayerIds: [...currentIds, unselected.id],
+        });
+      } else {
+        // All overlapping are selected — deselect the topmost one
+        const topHit = allHits[0];
+        const newIds = currentIds.filter(id => id !== topHit.id);
+        updateComposition(composition.id, {
+          selectedLayerId: newIds.length > 0 ? newIds[newIds.length - 1] : null,
+          selectedLayerIds: newIds,
+        });
+      }
+      return; // Don't start a drag on shift+click
+    }
+
+    // Normal click — select topmost hit
+    const hit = allHits[0];
+    const isAlreadyMultiSelected = currentIds.includes(hit.id) && currentIds.length > 1;
+
+    if (!isAlreadyMultiSelected) {
+      updateComposition(composition.id, { selectedLayerId: hit.id, selectedLayerIds: [hit.id] });
+    }
+    pushUndo();
+
+    const dw = hit.nativeWidth * hit.scaleX;
+    const dh = hit.nativeHeight * hit.scaleY;
+
+    // Capture start positions of all selected layers for group move
+    const idsToMove = isAlreadyMultiSelected ? currentIds : [hit.id];
+    const multiStarts = idsToMove
+      .map(id => { const l = layers.find(la => la.id === id); return l ? { id: l.id, x: l.x, y: l.y } : null; })
+      .filter((s): s is NonNullable<typeof s> => s !== null);
+
+    setDragState({
+      layerId: hit.id,
+      startX: e.clientX, startY: e.clientY,
+      startLX: hit.x, startLY: hit.y,
+      startScaleX: hit.scaleX, startScaleY: hit.scaleY,
+      startW: dw, startH: dh,
+      mode: 'move',
+      multiStarts,
+    });
+  }, [canvasToWorld, hitTestAll, pushUndo, updateComposition, composition.id, composition.selectedLayerIds, layers]);
 
   // Global pointer move/up for dragging
   useEffect(() => {
@@ -232,10 +289,17 @@ export const BannerCanvas: React.FC<BannerCanvasProps> = ({ composition }) => {
       if (!layer) return;
 
       if (dragState.mode === 'move') {
-        updateLayer(composition.id, dragState.layerId, {
-          x: dragState.startLX + dx,
-          y: dragState.startLY + dy,
-        });
+        // Move all multi-selected layers together
+        if (dragState.multiStarts && dragState.multiStarts.length > 1) {
+          for (const s of dragState.multiStarts) {
+            updateLayer(composition.id, s.id, { x: s.x + dx, y: s.y + dy });
+          }
+        } else {
+          updateLayer(composition.id, dragState.layerId, {
+            x: dragState.startLX + dx,
+            y: dragState.startLY + dy,
+          });
+        }
       } else if (dragState.mode === 'rotate') {
         const dw = layer.nativeWidth * layer.scaleX;
         const dh = layer.nativeHeight * layer.scaleY;
@@ -302,35 +366,44 @@ export const BannerCanvas: React.FC<BannerCanvasProps> = ({ composition }) => {
         return;
       }
 
+      const multiIds = composition.selectedLayerIds ?? [];
+      const multiLayers = multiIds.length > 0
+        ? layers.filter(l => multiIds.includes(l.id) && !l.locked)
+        : selectedLayer && !selectedLayer.locked ? [selectedLayer] : [];
+
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedLayer && !selectedLayer.locked) {
+        if (multiLayers.length > 0) {
           pushUndo();
+          const idsToDelete = new Set(multiLayers.map(l => l.id));
           updateComposition(composition.id, {
-            layers: layers.filter(l => l.id !== selectedLayer.id),
+            layers: layers.filter(l => !idsToDelete.has(l.id)),
             selectedLayerId: null,
+            selectedLayerIds: [],
           });
         }
         return;
       }
 
-      if (selectedLayer && !selectedLayer.locked) {
+      if (multiLayers.length > 0) {
         const step = e.shiftKey ? 10 : 1;
-        const updates: Partial<BannerLayer> = {};
-        if (e.key === 'ArrowLeft') updates.x = selectedLayer.x - step;
-        if (e.key === 'ArrowRight') updates.x = selectedLayer.x + step;
-        if (e.key === 'ArrowUp') updates.y = selectedLayer.y - step;
-        if (e.key === 'ArrowDown') updates.y = selectedLayer.y + step;
-        if (Object.keys(updates).length) {
+        let dx = 0, dy = 0;
+        if (e.key === 'ArrowLeft') dx = -step;
+        if (e.key === 'ArrowRight') dx = step;
+        if (e.key === 'ArrowUp') dy = -step;
+        if (e.key === 'ArrowDown') dy = step;
+        if (dx || dy) {
           e.preventDefault();
           pushUndo();
-          updateLayer(composition.id, selectedLayer.id, updates);
+          for (const l of multiLayers) {
+            updateLayer(composition.id, l.id, { x: l.x + dx, y: l.y + dy });
+          }
         }
       }
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedLayer, layers, composition.id, undo, redo, pushUndo, updateComposition, updateLayer]);
+  }, [selectedLayer, layers, composition.id, composition.selectedLayerIds, undo, redo, pushUndo, updateComposition, updateLayer]);
 
   // ---- Compute selection overlay position ----
   const selectionOverlay = useMemo(() => {
@@ -346,6 +419,29 @@ export const BannerCanvas: React.FC<BannerCanvasProps> = ({ composition }) => {
       rotation: sl.rotation || 0,
     };
   }, [selectedLayer, viewScale]);
+
+  // Secondary selection highlights for multi-selected layers (no handles, just outlines)
+  const secondaryOverlays = useMemo(() => {
+    const ids = composition.selectedLayerIds ?? [];
+    if (ids.length <= 1) return [];
+    return ids
+      .filter(id => id !== selectedLayerId) // primary already has full handles
+      .map(id => {
+        const l = layers.find(la => la.id === id);
+        if (!l || !l.visible) return null;
+        const dw = l.nativeWidth * l.scaleX;
+        const dh = l.nativeHeight * l.scaleY;
+        return {
+          id: l.id,
+          left: l.x * viewScale,
+          top: l.y * viewScale,
+          width: dw * viewScale,
+          height: dh * viewScale,
+          rotation: l.rotation || 0,
+        };
+      })
+      .filter((o): o is NonNullable<typeof o> => o !== null);
+  }, [composition.selectedLayerIds, selectedLayerId, layers, viewScale]);
 
   const HANDLE_SIZE = 12;
 
@@ -393,8 +489,8 @@ export const BannerCanvas: React.FC<BannerCanvasProps> = ({ composition }) => {
         <span className="text-[10px] text-zinc-400">{composition.width}x{composition.height}</span>
       </div>
 
-      {/* Canvas area — relative container so DOM selection overlay can extend outside */}
-      <div ref={containerRef} className="flex-1 flex items-center justify-center overflow-visible bg-zinc-950 p-6 relative">
+      {/* Canvas area — overflow-hidden keeps flex-1 constrained to parent size (scale-to-fit) */}
+      <div ref={containerRef} className="flex-1 flex items-center justify-center overflow-hidden bg-zinc-950 p-6 relative">
         <div className="relative" style={{ width: composition.width * viewScale, height: composition.height * viewScale, opacity: viewScale > 0 ? 1 : 0 }}>
           {/* The actual canvas */}
           <canvas
@@ -405,6 +501,21 @@ export const BannerCanvas: React.FC<BannerCanvasProps> = ({ composition }) => {
             className="shadow-2xl cursor-crosshair block"
             style={{ width: composition.width * viewScale, height: composition.height * viewScale }}
           />
+
+          {/* Secondary selection outlines for multi-selected layers */}
+          {secondaryOverlays.map(ov => (
+            <div
+              key={ov.id}
+              className="absolute pointer-events-none"
+              style={{
+                left: ov.left, top: ov.top, width: ov.width, height: ov.height,
+                transform: ov.rotation ? `rotate(${ov.rotation}deg)` : undefined,
+                transformOrigin: 'center center', zIndex: 9,
+              }}
+            >
+              <div className="absolute inset-0 border-2 border-cyan-400/50 border-dashed pointer-events-none" style={{ margin: -1 }} />
+            </div>
+          ))}
 
           {/* DOM selection overlay — visible OUTSIDE canvas bounds */}
           {selectionOverlay && selectedLayer && !selectedLayer.locked && (

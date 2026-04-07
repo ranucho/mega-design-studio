@@ -636,8 +636,10 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
             type: 'background',
             name: 'Reels Frame',
           });
+          toast('Reels frame extracted', { type: 'success' });
         } catch (frameErr) {
           console.error('Frame extraction failed', frameErr);
+          toast('Frame extraction failed', { type: 'error' });
           // Fallback to raw crop
           updateActiveFrame({
             reelsFrame: cropDataUrl,
@@ -686,7 +688,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
       }
     } catch (err) {
       console.error(err);
-      alert('Extraction failed.');
+      toast('Extraction failed', { type: 'error' });
       if (!isFrame) {
         setSymbolGenState(prev => ({
           ...prev,
@@ -711,7 +713,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
       // Step 1: AI detects all unique symbols and their bounding boxes
       const detected = await detectSymbolPositions(sourceImg);
       if (!detected.length) {
-        alert('No symbols detected in the image.');
+        toast('No symbols detected in the image', { type: 'error' });
         setIsAutoExtracting(false);
         return;
       }
@@ -836,7 +838,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
       }));
     } catch (err) {
       console.error(err);
-      alert('Retry failed.');
+      toast('Retry failed', { type: 'error' });
       setSymbolGenState(prev => ({
         ...prev,
         symbols: prev.symbols.map(s => (s.id === symbolId ? { ...s, isProcessing: false } : s)),
@@ -967,7 +969,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
       name: sym.name,
     };
     setReferenceAssets(prev => [...prev, asset]);
-    alert('Saved to Assets!');
+    toast('Saved to Assets', { type: 'success' });
   };
 
   // Feature 4: Auto re-extract all symbols after reskin
@@ -1221,6 +1223,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
       }
     } catch (err) {
       console.error('Edit failed', err);
+      toast('Edit failed', { type: 'error' });
       if (isReelsFrame) {
         setIsCleaningFrame(false);
       } else {
@@ -1363,16 +1366,16 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
   const handleRandomFill = () => {
     const regularIds = symbols.filter(s => s.isolatedUrl && (s.spanRows || 1) === 1).map(s => s.id);
     const longTileIds = symbols.filter(s => s.isolatedUrl && (s.spanRows || 1) >= 3).map(s => s.id);
-    if (regularIds.length === 0) { alert('Extract symbols first.'); return; }
+    if (regularIds.length === 0) { toast('Extract symbols first', { type: 'error' }); return; }
     updateActiveLayout({ gridState: buildGridWithLongTiles(regularIds, longTileIds), hideReelsBg: false });
   };
 
   const handleVShapeFill = () => {
     const wild = symbols.find(s => s.name === 'Wild' && (s.spanRows || 1) === 1);
-    if (!wild || !wild.isolatedUrl) { alert("Extract 'Wild' symbol first."); return; }
+    if (!wild || !wild.isolatedUrl) { toast("Extract 'Wild' symbol first", { type: 'error' }); return; }
     const others = symbols.filter(s => s.isolatedUrl && s.id !== wild.id && (s.spanRows || 1) === 1).map(s => s.id);
     const longTileIds = symbols.filter(s => s.isolatedUrl && (s.spanRows || 1) >= 3).map(s => s.id);
-    if (others.length === 0) { alert('Extract other symbols first.'); return; }
+    if (others.length === 0) { toast('Extract other symbols first', { type: 'error' }); return; }
 
     const vCoords = [
       { r: 1, c: 0 }, { r: 2, c: 1 }, { r: 3, c: 2 }, { r: 2, c: 3 }, { r: 1, c: 4 },
@@ -1382,9 +1385,9 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
 
   const handleChessboardFill = () => {
     const wild = symbols.find(s => s.name === 'Wild' && (s.spanRows || 1) === 1);
-    if (!wild || !wild.isolatedUrl) { alert("Extract 'Wild' symbol first for Chessboard."); return; }
+    if (!wild || !wild.isolatedUrl) { toast("Extract 'Wild' symbol first for Chessboard", { type: 'error' }); return; }
     const others = symbols.filter(s => s.isolatedUrl && s.id !== wild.id && (s.spanRows || 1) === 1).map(s => s.id);
-    if (others.length === 0) { alert('Extract other symbols first.'); return; }
+    if (others.length === 0) { toast('Extract other symbols first', { type: 'error' }); return; }
 
     // Chessboard doesn't mix well with long tiles — use regular symbols only
     const g = (gridState || []).map((row, r) =>
@@ -1399,7 +1402,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
 
   const handleClearVShapeFill = () => {
     const wild = symbols.find(s => s.name === 'Wild' && (s.spanRows || 1) === 1);
-    if (!wild || !wild.isolatedUrl) { alert("Extract 'Wild' symbol first."); return; }
+    if (!wild || !wild.isolatedUrl) { toast("Extract 'Wild' symbol first", { type: 'error' }); return; }
     const vPositions = new Set(
       [{ r: 1, c: 0 }, { r: 2, c: 1 }, { r: 3, c: 2 }, { r: 2, c: 3 }, { r: 1, c: 4 }]
         .map(({ r, c }) => `${r}-${c}`)
@@ -1412,7 +1415,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
 
   const handleClearChessFill = () => {
     const wild = symbols.find(s => s.name === 'Wild' && (s.spanRows || 1) === 1);
-    if (!wild || !wild.isolatedUrl) { alert("Extract 'Wild' symbol first."); return; }
+    if (!wild || !wild.isolatedUrl) { toast("Extract 'Wild' symbol first", { type: 'error' }); return; }
     const g = (gridState || []).map((row, r) =>
       row.map((_, c) => (r + c) % 2 === 0 ? wild.id : '')
     );
@@ -1886,7 +1889,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
 
   const handleGenerateVideo = async () => {
     if (!selectedStartFrameId || !selectedEndFrameId) {
-      alert('Select Start and End frames.');
+      toast('Select Start and End frames', { type: 'error' });
       return;
     }
     const allFrames = savedFrames || mergedFrames;
@@ -1895,7 +1898,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
     if (!startFrame || !endFrame) return;
 
     const activePrompts = (animationPrompts || [animationPrompt]).filter(p => p.trim());
-    if (activePrompts.length === 0) { alert('Enter at least one animation prompt.'); return; }
+    if (activePrompts.length === 0) { toast('Enter at least one animation prompt', { type: 'error' }); return; }
     const count = Math.min(4, Math.max(1, animationVideoCount || 1));
     const total = activePrompts.length * count;
 

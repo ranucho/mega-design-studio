@@ -10,6 +10,14 @@ const QUICK_SELECTS: { label: string; icon: string; filter: (cat: BannerPresetCa
   { label: 'App Stores', icon: 'fa-mobile-screen', filter: c => c === 'app-stores' },
 ];
 
+const BAGELCODE_KEYS = [
+  'youtube-thumb', 'fb-feed', 'mobile-landscape-480', 'gdn-large-rect',
+  'gdn-medium-rect', 'portrait-hd-720', 'ipad-portrait', 'gdn-half-page',
+  'mobile-portrait-320', 'square-480', 'gdn-leaderboard', 'gdn-mobile-large',
+  'full-banner-468', 'gdn-mobile-banner', 'small-mobile-300', 'ig-portrait',
+  'ig-stories', 'fullhd-landscape',
+];
+
 const CATEGORY_ICONS: Record<BannerPresetCategory, string> = {
   'app-stores': 'fa-mobile-screen',
   'facebook': 'fa-square-facebook',
@@ -21,7 +29,7 @@ const CATEGORY_ICONS: Record<BannerPresetCategory, string> = {
 };
 
 export const BannerPresets: React.FC = () => {
-  const { project, togglePreset, setSelectedPresets, setStage, generateCompositions } = useBanner();
+  const { project, togglePreset, setSelectedPresets, setStage, setProject, generateCompositions, applyCtaShorteningToExisting } = useBanner();
 
   const selectedKeys = useMemo(() => new Set(project?.selectedPresets ?? []), [project?.selectedPresets]);
   const existingKeys = useMemo(() => new Set(
@@ -35,6 +43,23 @@ export const BannerPresets: React.FC = () => {
     }
     return map;
   }, []);
+
+  const handleBagelcodeSelect = useCallback(() => {
+    const allSelected = BAGELCODE_KEYS.every(k => selectedKeys.has(k));
+    if (allSelected) {
+      setSelectedPresets(
+        (project?.selectedPresets ?? []).filter(k => !BAGELCODE_KEYS.includes(k))
+      );
+    } else {
+      const merged = new Set([...(project?.selectedPresets ?? []), ...BAGELCODE_KEYS]);
+      setSelectedPresets(Array.from(merged));
+    }
+  }, [selectedKeys, project?.selectedPresets, setSelectedPresets]);
+
+  const bagelcodeAllSelected = useMemo(
+    () => BAGELCODE_KEYS.every(k => selectedKeys.has(k)),
+    [selectedKeys]
+  );
 
   const handleQuickSelect = useCallback((filter: (cat: BannerPresetCategory) => boolean) => {
     const keys = BANNER_PRESETS
@@ -87,6 +112,38 @@ export const BannerPresets: React.FC = () => {
                 </button>
               );
             })}
+            <button
+              key="bagelcode"
+              onClick={handleBagelcodeSelect}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                bagelcodeAllSelected
+                  ? 'bg-amber-600/20 text-amber-300 border-amber-600/40'
+                  : 'text-amber-400/80 border-amber-700/40 hover:border-amber-500 hover:text-amber-300'
+              }`}
+              title="All 18 Bagelcode production banner sizes"
+            >
+              <i className="fa-solid fa-star mr-1.5" />
+              All Bagelcode
+            </button>
+          </div>
+
+          {/* Generation options */}
+          <div className="flex items-center justify-center gap-3 text-xs">
+            <label className="flex items-center gap-2 cursor-pointer select-none text-zinc-300 hover:text-white transition-colors">
+              <input
+                type="checkbox"
+                checked={project?.shortenCTAs !== false}
+                onChange={e => applyCtaShorteningToExisting(e.target.checked)}
+                className="w-3.5 h-3.5 rounded accent-cyan-500"
+              />
+              <span>
+                <i className="fa-solid fa-scissors mr-1 text-cyan-400/70" />
+                Shorten CTAs on narrow banners
+              </span>
+              <span className="text-[10px] text-zinc-500" title="SPIN NOW → SPIN, CLAIM NOW! → CLAIM, etc.">
+                <i className="fa-solid fa-circle-info" />
+              </span>
+            </label>
           </div>
 
           {/* Grouped presets */}
@@ -200,9 +257,51 @@ export const BannerPresets: React.FC = () => {
               </span>
             );
           })()}
+          {(() => {
+            const KICKOFFS = ['fb-feed', 'fb-square', 'fb-stories', 'fullhd-landscape'];
+            const comps = project?.compositions ?? [];
+            const touchedKickoffCount = comps.filter(
+              c => KICKOFFS.includes(c.presetKey) &&
+                (c.status === 'edited' || c.status === 'approved'),
+            ).length;
+            const selectedNonKickoffKeys = [...selectedKeys].filter(k => !KICKOFFS.includes(k));
+            const canPropagate = touchedKickoffCount > 0 && selectedNonKickoffKeys.length > 0;
+            return canPropagate && !project?.isGenerating ? (
+              <button
+                onClick={() => {
+                  if (confirm(`Regenerate ${selectedNonKickoffKeys.length} banner(s) using the ${touchedKickoffCount} edited primary banner(s) (FB Feed/Square/Stories/1920x1080) as AI reference?\n\nAny existing layouts on the other banners will be replaced with new AI designs that match your primary layouts.`)) {
+                    generateCompositions({ onlyKeys: selectedNonKickoffKeys });
+                  }
+                }}
+                className="relative px-5 py-2.5 text-sm font-semibold rounded-lg transition-all bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 text-white shadow-lg shadow-purple-600/40 ring-2 ring-purple-400/50 hover:ring-purple-300/70 hover:scale-[1.02] flex items-center gap-2"
+                title={`Regenerate ${selectedNonKickoffKeys.length} other banners using your ${touchedKickoffCount} edited primary banner(s) as AI reference layouts`}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="1" y="9" width="7" height="6" rx="1.2" />
+                  <rect x="16" y="1" width="7" height="5.5" rx="1.2" />
+                  <rect x="16" y="9.25" width="7" height="5.5" rx="1.2" />
+                  <rect x="16" y="17.5" width="7" height="5.5" rx="1.2" />
+                  <path d="M8 12 H12 M12 4 V20 M12 4 H16 M12 12 H16 M12 20 H16" />
+                </svg>
+                Apply Primary Layouts to {selectedNonKickoffKeys.length} Others
+                <span className="absolute -top-1.5 -right-1.5 flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-fuchsia-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-fuchsia-500"></span>
+                </span>
+              </button>
+            ) : null;
+          })()}
           <button
             disabled={selectedCount === 0 || project?.isGenerating}
-            onClick={() => generateCompositions()}
+            onClick={() => {
+              const KICKOFFS = ['fb-feed', 'fb-square', 'fb-stories', 'fullhd-landscape'];
+              const nonKickoffKeys = [...selectedKeys].filter(k => !KICKOFFS.includes(k));
+              if (nonKickoffKeys.length > 0) {
+                generateCompositions({ onlyKeys: nonKickoffKeys });
+              } else {
+                generateCompositions();
+              }
+            }}
             className={`px-6 py-2.5 text-sm font-medium rounded-lg transition-all shadow-lg ${
               selectedCount > 0 && !project?.isGenerating
                 ? 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-cyan-600/20'

@@ -1,7 +1,7 @@
 import { Type } from "@google/genai";
 import { getAI, parseDataUrl, retryOperation } from "./client";
 import { ExtractedElement, BannerLayer } from "@/types";
-import { ALL_COMPOSITION_RULES, getLayerZOrder, isWideStrip } from "./banner-rules";
+import { ALL_COMPOSITION_RULES, getLayerZOrder, isWideStrip, getSizeSpecificRules, isNarrowBanner, isTallBanner, CTA_ABBREVIATION_MAP } from "./banner-rules";
 
 /** Analyze a banner image and detect all visual elements with bounding boxes and roles */
 export const analyzeBanner = async (
@@ -1163,6 +1163,9 @@ export const generateBannerLayout = async (
   targetHeight: number,
   sourceWidth: number,
   sourceHeight: number,
+  templateComposition?: { width: number; height: number; layers: Array<{ name: string; role: string; x: number; y: number; scaleX: number; scaleY: number; nativeWidth: number; nativeHeight: number }> } | null,
+  referenceImages?: Array<{ label: string; dataUrl: string; width: number; height: number }>,
+  shortenCTAs?: boolean,
 ): Promise<Array<{
   elementId: string;
   x: number;
@@ -1188,6 +1191,9 @@ export const generateBannerLayout = async (
     nativeHeight: el.nativeHeight,
     aspectRatio: +(el.nativeWidth / el.nativeHeight).toFixed(2),
     detectedText: el.detectedText || null,
+    // Variant info — AI should pick ONE per variant-group (original OR variant, not both)
+    variantOfId: el.variantOfId || null,
+    variantKind: el.variantKind || null,
     // Original position in source banner (for context)
     sourcePosition: el.sourceBbox ? {
       xPct: Math.round(el.sourceBbox.x),
@@ -1197,9 +1203,40 @@ export const generateBannerLayout = async (
     } : null,
   }));
 
-  const isStrip = isWideStrip(targetWidth, targetHeight);
+  const isStrip = isWideStrip(targetWidth, targetHeight) || (targetHeight <= 100 && targetWidth / targetHeight >= 3);
+  const is728x90 = targetWidth === 728 && targetHeight === 90;
+  const sizeSpecificRules = getSizeSpecificRules(targetWidth, targetHeight);
+  const slim = isNarrowBanner(targetWidth, targetHeight);
 
-  const prompt = `You are a senior banner ad designer. Design the layout for a ${targetWidth}×${targetHeight}px (${aspectLabel}) banner.${isStrip ? ' THIS IS A WIDE STRIP BANNER — follow the strip layout rules below.' : ''}
+  const ctaAbbrevMappings = Object.entries(CTA_ABBREVIATION_MAP)
+    .map(([from, to]) => `"${from}" → "${to}"`)
+    .join(', ');
+
+  const templateBlock = templateComposition
+    ? `\n\nREFERENCE LAYOUT (follow this composition style — an approved design with a similar aspect ratio):
+Canvas: ${templateComposition.width}×${templateComposition.height}
+Layers (in EXACT z-order, index 0 = bottom/back, higher = front/top): ${JSON.stringify(
+      templateComposition.layers.map((l, i) => ({
+        zIndex: i,
+        name: l.name,
+        role: l.role,
+        xPct: +((l.x / templateComposition.width) * 100).toFixed(1),
+        yPct: +((l.y / templateComposition.height) * 100).toFixed(1),
+        wPct: +(((l.nativeWidth * l.scaleX) / templateComposition.width) * 100).toFixed(1),
+        hPct: +(((l.nativeHeight * l.scaleY) / templateComposition.height) * 100).toFixed(1),
+      })),
+      null,
+      2,
+    )}
+CRITICAL: Match this reference layout as closely as possible:
+- LAYER STACKING: Return elements in the SAME z-order as shown above (zIndex 0 first in array, highest zIndex last). If the character is behind the game shot in the reference, it MUST be behind in your result too.
+- POSITIONS: Use the xPct/yPct/wPct/hPct as targets — adapt only as needed for the new aspect ratio
+- SIZING: Maintain the same proportional relationships between elements
+- HIERARCHY: Same overall composition and visual hierarchy
+Only deviate when the new aspect ratio absolutely forces it. Do NOT redesign — adapt.`
+    : '';
+
+  const prompt = `You are a senior banner ad designer. Design the layout for a ${targetWidth}×${targetHeight}px (${aspectLabel}) banner.${isStrip ? ' THIS IS A WIDE STRIP BANNER — follow the strip layout rules below.' : ''}${slim && shortenCTAs !== false ? `\n\nThis is a SLIM banner. When the CTA text is long, shorten per these mappings: ${ctaAbbrevMappings}` : ''}${slim && shortenCTAs === false ? '\n\nThis is a SLIM banner, but keep the original CTA text intact (user has disabled CTA shortening).' : ''}${templateBlock}
 
 SOURCE BANNER: ${sourceWidth}×${sourceHeight}px. The following elements were extracted from it:
 
@@ -1212,20 +1249,64 @@ For each element, return its position and uniform scale factor. The scale is rel
 TECHNICAL RULES:
 1. BACKGROUND uses COVER mode (like CSS background-size:cover): uniform scale to FILL the canvas, then center it. Calculate: scale = Math.max(targetWidth/nativeWidth, targetHeight/nativeHeight). Then x = (targetWidth - nativeWidth*scale)/2, y = (targetHeight - nativeHeight*scale)/2. scaleX === scaleY (NO stretching — background must maintain its proportions).
 2. ALL elements use UNIFORM scale: scaleX === scaleY (preserve aspect ratio, NEVER stretch any element).
-3. ALL extracted elements MUST appear (visible: true). Even on small canvases, include every element. NEVER set visible to false.${isStrip ? ' Exception: game shots/screenshots can be hidden on strip banners.' : ''}
+3. ALL extracted elements MUST appear (visible: true). Even on small canvases, include every element.${isStrip ? `\n   STRIP BANNER EXCEPTION: On this strip banner, set visible:false for these element types: slot machine/game screenshots/reels, coin piles, decorative elements. ${is728x90 ? 'Speech bubbles CAN be visible on 728x90.' : 'Also hide speech bubbles on this small strip.'} Only show: background, ribbon, logo, headline, character (face/bust crop), and CTA.` : ' NEVER set visible to false.'}
+4. VARIANT ELEMENTS: Some elements have a "variantOfId" pointing to a parent element. These are alternate renderings of the same content (e.g. a SHORT CTA or a 2-LINE headline). For each variant-group (parent + its variants), pick EXACTLY ONE to include — hide the others by setting their visible:false. Rules:
+   This banner is ${targetWidth}×${targetHeight} (aspect ratio width/height = ${(targetWidth / targetHeight).toFixed(2)}). Classify:
+     • SLIM/STRIP  if aspect >= 2.2 (e.g. 728x90, 970x250, 320x50)
+     • TOWER/SKY   if aspect <= 0.45 (e.g. 160x600, 300x600, 120x600)
+     • TALL/PORTRAIT if aspect < 0.72 but > 0.45 (e.g. 1080x1920, 1080x1350)
+     • STANDARD    otherwise (square, landscape, most rectangles)
+
+   - variantKind "short": pick this ONLY when the banner is SLIM/STRIP or TOWER/SKY. On STANDARD and TALL/PORTRAIT banners, use the ORIGINAL (parent) CTA — the full phrase fits.
+   - variantKind "multiline" (2-line): pick this on TOWER/SKY and TALL/PORTRAIT banners where the original 1-line headline would be too wide. On SLIM/STRIP banners use the ORIGINAL (one-line text fits the strip width). On STANDARD banners use the ORIGINAL.
+   - Never include both the parent AND its variant as visible — that would duplicate the asset.
+   - The layout engine will auto-align variants to the parent's position/size; focus on picking the right one.
 
 ${ALL_COMPOSITION_RULES}
-
+${sizeSpecificRules ? `\nSIZE-SPECIFIC RULES:\n${sizeSpecificRules}\n` : ''}
 Return a JSON array with one entry per element:
 [{ "elementId": "...", "x": number, "y": number, "scaleX": number, "scaleY": number, "visible": boolean }]
 
+CRITICAL — NO DEAD SPACE: The composition MUST fill the ENTIRE ${targetWidth}×${targetHeight} canvas. Do NOT leave empty/unused areas on any side. Distribute elements to cover the canvas. If the reference template has a different aspect ratio, REDISTRIBUTE elements to fill the new shape rather than simply centering them with gaps.
+
+CRITICAL — BALANCED SIZING: On a ${targetWidth}×${targetHeight} canvas, scale elements to fit proportionally. No single foreground element should exceed ~55% of the canvas width AND ~55% of the canvas height (except background). If the source banner is much larger, you MUST scale elements DOWN significantly. Think about what looks good at THIS canvas size — a game screenshot that fills 80% of a 1200px banner should only fill ~40-50% of a 320px banner. Leave breathing room between elements.
+
+CRITICAL — ARRAY ORDER IS Z-INDEX: Return elements in BACK-TO-FRONT order. First element = bottommost layer (background), last element = topmost layer (CTA/foreground). This order defines the visual stacking. If a reference template is provided, match its layer order EXACTLY.
+
 x,y are the TOP-LEFT corner position in pixels. Scale is a multiplier on native dimensions.`;
+
+  // Build multi-modal parts: reference images first, then text prompt
+  const refImageParts: any[] = [];
+  if (referenceImages && referenceImages.length > 0) {
+    for (const ref of referenceImages) {
+      try {
+        const parsed = parseDataUrl(ref.dataUrl);
+        refImageParts.push({
+          text: `[Reference: user-approved ${ref.label} layout at ${ref.width}×${ref.height}]`,
+        });
+        refImageParts.push({ inlineData: { mimeType: parsed.mimeType, data: parsed.data } });
+      } catch {
+        // skip invalid data urls
+      }
+    }
+    if (refImageParts.length > 0) {
+      refImageParts.unshift({
+        text: `VISUAL REFERENCES (CRITICAL — YOU MUST FOLLOW THESE): The following ${referenceImages.length} image(s) are user-approved layouts that define the visual language for this project. When designing the ${targetWidth}×${targetHeight} canvas you MUST:
+1. Replicate the element ORDERING (which element is in front/behind)
+2. Preserve the HIERARCHY (which element is dominant, secondary, tertiary)
+3. Match the COMPOSITION (where things sit — top/center/bottom, left/center/right)
+4. Keep the same relative SIZING ratios between elements
+5. Keep the same CTA placement and prominence
+Only deviate from the references when the aspect ratio absolutely forces it (e.g., slim strip needs horizontal reflow). Do NOT redesign. These references are the ground truth.`,
+      });
+    }
+  }
 
   try {
     const response = await retryOperation(() =>
       ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: { parts: [{ text: prompt }] },
+        contents: { parts: [...refImageParts, { text: prompt }] },
         config: {
           responseMimeType: 'application/json',
           responseSchema: {
@@ -1249,48 +1330,270 @@ x,y are the TOP-LEFT corner position in pixels. Scale is a multiplier on native 
 
     const parsed = JSON.parse(response.text || '[]');
 
-    // Validate and sanitize the AI response
+    // Validate and sanitize the AI response.
+    // IMPORTANT: preserve the AI's response ORDER — it defines z-index (layer stacking).
+    // The AI is instructed to return elements in visual layer order matching the template.
     const results: Array<{
       elementId: string; x: number; y: number;
       scaleX: number; scaleY: number; visible: boolean;
     }> = [];
+    const processedIds = new Set<string>();
 
-    for (const el of elements) {
-      const aiLayout = parsed.find((p: any) => p.elementId === el.id);
+    // Phase 1: Process elements in the AI's response order (preserves z-index intent)
+    for (const aiLayout of parsed) {
+      const el = elements.find(e => e.id === aiLayout.elementId);
+      if (!el || processedIds.has(el.id)) continue;
+      processedIds.add(el.id);
+
       const isBackground = el.role === 'background';
+      const sx = Math.max(0.01, aiLayout.scaleX || 1);
+      const sy = Math.max(0.01, aiLayout.scaleY || 1);
 
-      if (aiLayout) {
-        const sx = Math.max(0.01, aiLayout.scaleX || 1);
-        const sy = Math.max(0.01, aiLayout.scaleY || 1);
+      // ALL elements use uniform scale — even backgrounds (cover mode)
+      const uniformScale = isBackground
+        ? Math.max(targetWidth / el.nativeWidth, targetHeight / el.nativeHeight) // cover
+        : Math.min(sx, sy); // use AI's suggestion but enforce uniform
 
-        // ALL elements use uniform scale — even backgrounds (cover mode)
-        const uniformScale = isBackground
-          ? Math.max(targetWidth / el.nativeWidth, targetHeight / el.nativeHeight) // cover
-          : Math.min(sx, sy); // use AI's suggestion but enforce uniform
+      // Background: center it (cover mode crops edges)
+      const bgX = isBackground ? Math.round((targetWidth - el.nativeWidth * uniformScale) / 2) : Math.round(Math.max(0, aiLayout.x || 0));
+      const bgY = isBackground ? Math.round((targetHeight - el.nativeHeight * uniformScale) / 2) : Math.round(Math.max(0, aiLayout.y || 0));
 
-        // Background: center it (cover mode crops edges)
-        const bgX = isBackground ? Math.round((targetWidth - el.nativeWidth * uniformScale) / 2) : Math.round(Math.max(0, aiLayout.x || 0));
-        const bgY = isBackground ? Math.round((targetHeight - el.nativeHeight * uniformScale) / 2) : Math.round(Math.max(0, aiLayout.y || 0));
+      // Respect AI's visibility choice for variant elements and strip banners
+      const isVariantElement = !!el.variantOfId || elements.some(other => other.variantOfId === el.id);
+      // On strip banners, respect AI's visible:false (it's told to hide slots/coins/decorations)
+      // On non-strip, non-variants always visible:true
+      const visible = isVariantElement
+        ? (aiLayout.visible !== false)
+        : isStrip
+          ? (aiLayout.visible !== false) // respect AI hiding on strips
+          : true;
 
-        results.push({
-          elementId: el.id,
-          x: bgX,
-          y: bgY,
-          scaleX: isBackground ? uniformScale : uniformScale,
-          scaleY: isBackground ? uniformScale : uniformScale,
-          visible: true,
-        });
-      } else {
-        // AI didn't return this element — use sensible defaults
-        const coverScale = Math.max(targetWidth / el.nativeWidth, targetHeight / el.nativeHeight);
-        results.push({
-          elementId: el.id,
-          x: isBackground ? Math.round((targetWidth - el.nativeWidth * coverScale) / 2) : 0,
-          y: isBackground ? Math.round((targetHeight - el.nativeHeight * coverScale) / 2) : 0,
-          scaleX: isBackground ? coverScale : 0.5,
-          scaleY: isBackground ? coverScale : 0.5,
-          visible: true,
-        });
+      results.push({
+        elementId: el.id,
+        x: bgX,
+        y: bgY,
+        scaleX: uniformScale,
+        scaleY: uniformScale,
+        visible,
+      });
+    }
+
+    // Phase 2: Append any elements the AI missed (sensible defaults)
+    for (const el of elements) {
+      if (processedIds.has(el.id)) continue;
+      const isBackground = el.role === 'background';
+      const coverScale = Math.max(targetWidth / el.nativeWidth, targetHeight / el.nativeHeight);
+      results.push({
+        elementId: el.id,
+        x: isBackground ? Math.round((targetWidth - el.nativeWidth * coverScale) / 2) : 0,
+        y: isBackground ? Math.round((targetHeight - el.nativeHeight * coverScale) / 2) : 0,
+        scaleX: isBackground ? coverScale : 0.5,
+        scaleY: isBackground ? coverScale : 0.5,
+        visible: true,
+      });
+    }
+
+    // Phase 3: Post-processing — enforce hard layout constraints
+    const isStripBanner = isStrip;
+
+    // Strip banners: force-hide slots, coins, decorations, and bubbles (except 728x90 for bubbles)
+    if (isStripBanner) {
+      for (const layout of results) {
+        const el = elements.find(e => e.id === layout.elementId);
+        if (!el) continue;
+        const ll = el.label.toLowerCase();
+        const isSlot = ll.includes('slot') || ll.includes('game') || ll.includes('screenshot') || ll.includes('reel') || ll.includes('tray');
+        const isCoin = ll.includes('coin') || ll.includes('gold');
+        const isDecoration = el.role === 'decoration' && !ll.includes('ribbon') && !ll.includes('badge') && !ll.includes('new');
+        const isBubble = ll.includes('speech') || ll.includes('bubble');
+
+        if (isSlot || isCoin || isDecoration) layout.visible = false;
+        if (isBubble && !is728x90) layout.visible = false;
+      }
+    }
+
+    // --- Build lookup maps for cross-element constraints ---
+    const layoutMap = new Map<string, typeof results[0]>();
+    const elMap = new Map<string, typeof elements[0]>();
+    for (const layout of results) {
+      layoutMap.set(layout.elementId, layout);
+      const el = elements.find(e => e.id === layout.elementId);
+      if (el) elMap.set(el.id, el);
+    }
+
+    // Helper: get element bounding box
+    const getBox = (layout: typeof results[0], el: typeof elements[0]) => ({
+      x: layout.x, y: layout.y,
+      w: el.nativeWidth * layout.scaleX, h: el.nativeHeight * layout.scaleY,
+      right: layout.x + el.nativeWidth * layout.scaleX,
+      bottom: layout.y + el.nativeHeight * layout.scaleY,
+    });
+
+    console.log(`[POST-PROCESS] ${targetWidth}x${targetHeight} — ${results.length} elements, isStrip=${isStripBanner}`);
+    for (const layout of results) {
+      const el = elMap.get(layout.elementId);
+      if (!el || el.role === 'background' || !layout.visible) continue;
+
+      const lowerLabel = el.label.toLowerCase();
+      console.log(`  [PP] "${el.label}" role=${el.role} pos=(${layout.x},${layout.y}) scale=${layout.scaleX.toFixed(3)}`);
+
+      // --- FIX 1: Coin position — pin to BOTTOM EDGE as decorative ground band ---
+      const isCoin = lowerLabel.includes('coin') || lowerLabel.includes('gold');
+      if (isCoin) {
+        const beforeY = layout.y;
+        const beforeScale = layout.scaleX;
+        // Coins should be a decorative ground band: ~15% canvas height, pinned to bottom
+        const targetCoinH = targetHeight * 0.15;
+        const coinScale = targetCoinH / el.nativeHeight;
+        layout.scaleX = coinScale;
+        layout.scaleY = coinScale;
+        // Pin to absolute bottom edge
+        layout.y = Math.round(targetHeight - targetCoinH);
+        // Center horizontally (or keep AI x if reasonable)
+        const coinW = el.nativeWidth * coinScale;
+        layout.x = Math.round(Math.max(0, Math.min(targetWidth - coinW, layout.x)));
+        console.log(`    → COIN FIX: y ${beforeY} → ${layout.y}, scale ${beforeScale.toFixed(3)} → ${coinScale.toFixed(3)}`);
+        continue; // skip other checks for coins
+      }
+
+      // --- Canvas bounds clamping: 95% of element must be visible ---
+      const elW = el.nativeWidth * layout.scaleX;
+      const elH = el.nativeHeight * layout.scaleY;
+      const margin = 0.05; // allow only 5% overflow
+      layout.x = Math.round(Math.max(-elW * margin, Math.min(targetWidth - elW * (1 - margin), layout.x)));
+      layout.y = Math.round(Math.max(-elH * margin, Math.min(targetHeight - elH * (1 - margin), layout.y)));
+
+      // --- FIX 3: Max element size enforcement (non-background): 50% of canvas ---
+      if (el.role !== 'background') {
+        const maxW = targetWidth * 0.50;
+        const maxH = targetHeight * 0.50;
+        const curW = el.nativeWidth * layout.scaleX;
+        const curH = el.nativeHeight * layout.scaleY;
+        if (curW > maxW || curH > maxH) {
+          const shrink = Math.min(maxW / el.nativeWidth, maxH / el.nativeHeight);
+          if (shrink < layout.scaleX) {
+            layout.scaleX = shrink;
+            layout.scaleY = shrink;
+          }
+        }
+      }
+
+      // --- FIX 4: CTA margin enforcement: at least 5% from all edges ---
+      const isCTA = el.role === 'cta' || lowerLabel.includes('cta') || lowerLabel.includes('button');
+      if (isCTA) {
+        const mX = targetWidth * 0.05;
+        const mY = targetHeight * 0.05;
+        const ctaW = el.nativeWidth * layout.scaleX;
+        const ctaH = el.nativeHeight * layout.scaleY;
+        layout.x = Math.round(Math.max(mX, Math.min(targetWidth - ctaW - mX, layout.x)));
+        layout.y = Math.round(Math.max(mY, Math.min(targetHeight - ctaH - mY, layout.y)));
+      }
+    }
+
+    // --- FIX 2: Speech bubble must NOT overlap character face ---
+    for (const layout of results) {
+      const el = elMap.get(layout.elementId);
+      if (!el || !layout.visible) continue;
+      const ll = el.label.toLowerCase();
+      if (!(ll.includes('speech') || ll.includes('bubble'))) continue;
+
+      // Find the character element
+      const charLayout = results.find(r => {
+        const e = elMap.get(r.elementId);
+        return e && r.visible && (e.role === 'character' || e.label.toLowerCase().includes('character'));
+      });
+      if (!charLayout) continue;
+      const charEl = elMap.get(charLayout.elementId)!;
+      const charBox = getBox(charLayout, charEl);
+      const bubbleBox = getBox(layout, el);
+
+      // Face = top 40% of character (generous zone to prevent any overlap)
+      const faceBottom = charBox.y + charBox.h * 0.4;
+      const faceTop = charBox.y;
+
+      // Check ANY overlap between bubble and face zone (with generous margin)
+      const margin = Math.max(15, targetHeight * 0.03);
+      const overlapH = Math.min(bubbleBox.right, charBox.right + margin) - Math.max(bubbleBox.x, charBox.x - margin);
+      const overlapV = Math.min(bubbleBox.bottom, faceBottom + margin) - Math.max(bubbleBox.y, faceTop - margin);
+
+      if (overlapH > 0 && overlapV > 0) {
+        // Push bubble above the character's head with clear gap
+        const gap = Math.max(5, targetHeight * 0.02);
+        layout.y = Math.round(faceTop - bubbleBox.h - gap);
+        // If that goes above canvas, try to the right of character instead
+        if (layout.y < 0) {
+          layout.y = Math.round(faceTop);
+          layout.x = Math.round(charBox.right + gap);
+          // If that goes off canvas right, just keep above with y=0
+          if (layout.x + bubbleBox.w > targetWidth) {
+            layout.x = Math.round(charBox.x);
+            layout.y = 0;
+          }
+        }
+      }
+    }
+
+    // --- FIX 5: Character must not cover slot machine ---
+    for (const layout of results) {
+      const el = elMap.get(layout.elementId);
+      if (!el || !layout.visible) continue;
+      if (!(el.role === 'character' || el.label.toLowerCase().includes('character'))) continue;
+
+      // Find the slot/game element
+      const slotLayout = results.find(r => {
+        const e = elMap.get(r.elementId);
+        if (!e || !r.visible) return false;
+        const sl = e.label.toLowerCase();
+        return sl.includes('slot') || sl.includes('game') || sl.includes('reel') || sl.includes('tray') || sl.includes('screenshot');
+      });
+      if (!slotLayout) continue;
+      const slotEl = elMap.get(slotLayout.elementId)!;
+      const slotBox = getBox(slotLayout, slotEl);
+      const charBox = getBox(layout, el);
+
+      // Calculate horizontal overlap
+      const overlapLeft = Math.max(charBox.x, slotBox.x);
+      const overlapRight = Math.min(charBox.right, slotBox.right);
+      const hOverlap = Math.max(0, overlapRight - overlapLeft);
+
+      // If character overlaps slot by more than 15% of slot width, push character to the side
+      if (hOverlap > slotBox.w * 0.15) {
+        // Move character to the right of the slot
+        const newX = Math.round(slotBox.right - charBox.w * 0.1); // allow 10% body overlap
+        if (newX + charBox.w <= targetWidth * 1.05) {
+          layout.x = newX;
+        } else {
+          // Try left side
+          layout.x = Math.round(slotBox.x - charBox.w * 0.9);
+          if (layout.x < 0) layout.x = 0;
+        }
+      }
+    }
+
+    // --- FIX 6: Headline must not overlap ribbon ---
+    for (const layout of results) {
+      const el = elMap.get(layout.elementId);
+      if (!el || !layout.visible) continue;
+      if (!(el.role === 'text' || el.label.toLowerCase().includes('headline') || el.label.toLowerCase().includes('title'))) continue;
+
+      // Find ribbon
+      const ribbonLayout = results.find(r => {
+        const e = elMap.get(r.elementId);
+        if (!e || !r.visible) return false;
+        const rl = e.label.toLowerCase();
+        return rl.includes('ribbon') || rl.includes('badge') || rl.includes('new');
+      });
+      if (!ribbonLayout) continue;
+      const ribbonEl = elMap.get(ribbonLayout.elementId)!;
+      const ribbonBox = getBox(ribbonLayout, ribbonEl);
+      const headlineBox = getBox(layout, el);
+
+      // Check overlap (with margin)
+      const ribbonMargin = Math.max(5, targetHeight * 0.02);
+      if (headlineBox.x < ribbonBox.right + ribbonMargin && headlineBox.y < ribbonBox.bottom + ribbonMargin &&
+          headlineBox.right > ribbonBox.x - ribbonMargin && headlineBox.bottom > ribbonBox.y - ribbonMargin) {
+        // Push headline below the ribbon with clear gap
+        layout.y = Math.round(ribbonBox.bottom + ribbonMargin);
       }
     }
 
@@ -1309,8 +1612,33 @@ function fallbackLayout(
   targetHeight: number,
 ): Array<{ elementId: string; x: number; y: number; scaleX: number; scaleY: number; visible: boolean }> {
   const results: Array<{ elementId: string; x: number; y: number; scaleX: number; scaleY: number; visible: boolean }> = [];
+  const isNarrow = isNarrowBanner(targetWidth, targetHeight);
+  const isTall = targetHeight > targetWidth;
 
   for (const el of elements) {
+    // Variant handling: on narrow banners prefer 'short' variants; on tall banners prefer 'multiline'
+    // On standard banners, only use parents (non-variants).
+    if (el.variantOfId) {
+      const useThisVariant =
+        (el.variantKind === 'short' && isNarrow) ||
+        (el.variantKind === 'multiline' && (isTall || isNarrow));
+      if (!useThisVariant) {
+        results.push({ elementId: el.id, x: 0, y: 0, scaleX: 1, scaleY: 1, visible: false });
+        continue;
+      }
+    } else {
+      // This is a parent — if any of its variants will be used, hide the parent
+      const replacedByVariant = elements.some(v =>
+        v.variantOfId === el.id &&
+        ((v.variantKind === 'short' && isNarrow) ||
+         (v.variantKind === 'multiline' && (isTall || isNarrow)))
+      );
+      if (replacedByVariant) {
+        results.push({ elementId: el.id, x: 0, y: 0, scaleX: 1, scaleY: 1, visible: false });
+        continue;
+      }
+    }
+
     if (el.role === 'background') {
       // Cover mode: uniform scale, centered
       const coverScale = Math.max(targetWidth / el.nativeWidth, targetHeight / el.nativeHeight);

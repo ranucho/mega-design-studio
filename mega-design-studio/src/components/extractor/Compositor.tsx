@@ -965,170 +965,11 @@ export const Compositor: React.FC = () => {
           )}
         </div>
 
-        {/* Right panel: Layers + Properties */}
-        <div className="w-[480px] border-l border-zinc-800 flex flex-col bg-zinc-900/50 shrink-0 overflow-hidden">
-          {/* Add layer buttons */}
-          <div className="p-3 border-b border-zinc-800 flex gap-2">
-            <button onClick={() => setShowAssetPicker(true)} disabled={labAssets.length === 0}
-              className="flex-1 bg-violet-600/20 hover:bg-violet-600 border border-violet-500/30 text-violet-200 hover:text-white px-3 py-2 rounded-lg text-[10px] font-bold uppercase transition-colors flex items-center justify-center gap-1.5 disabled:opacity-30">
-              <i className="fas fa-folder-open" /> From Assets
-            </button>
-            <label className="flex-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 px-3 py-2 rounded-lg text-[10px] font-bold uppercase transition-colors flex items-center justify-center gap-1.5 cursor-pointer">
-              <i className="fas fa-upload" /> Upload
-              <input type="file" accept="image/*,video/*" className="hidden" onChange={handleFileUpload} />
-            </label>
-          </div>
-
-          {/* Layer list */}
-          <div className="flex-1 overflow-y-auto min-h-0">
-            <div className="p-2 text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-3">
-              Layers ({layers.length})
-            </div>
-            {layers.length === 0 ? (
-              <div className="p-6 text-center text-zinc-400 text-xs">
-                No layers yet.<br />Add videos or images.
-              </div>
-            ) : (
-              <div className="flex flex-col-reverse gap-0 px-2 pb-2">
-                {layers.map((layer, idx) => {
-                  const isSelected = selectedLayerId === layer.id;
-                  const showOpacity = expandedOpacity === layer.id;
-                  // Only visually dim once drag movement threshold is exceeded (ghost is showing)
-                  const isDragging = listDragId === layer.id && listGhostPos !== null;
-                  return (
-                    <div key={layer.id}>
-                      <div
-                        onClick={() => updateState({ selectedLayerId: isSelected ? null : layer.id })}
-                        onMouseDown={(e) => {
-                          // Don't start drag when interacting with buttons or inputs
-                          if ((e.target as HTMLElement).closest('button, input')) return;
-                          e.preventDefault();
-                          listDragStartYRef.current = e.clientY;
-                          setListDragId(layer.id);
-                        }}
-                        className={`flex items-center gap-1.5 px-2 py-1.5 cursor-grab active:cursor-grabbing border-b border-zinc-800/50 transition-colors ${
-                          isSelected ? 'bg-violet-600/15' : 'hover:bg-zinc-800/50'
-                        } ${isDragging ? 'opacity-30' : ''}`}
-                      >
-
-                        {/* Color square → opens color picker popover */}
-                        <div className="relative shrink-0">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setColorPickerLayerId(colorPickerLayerId === layer.id ? null : layer.id);
-                            }}
-                            className="w-4 h-4 rounded border border-zinc-600/50 hover:ring-2 hover:ring-white/40 transition-all"
-                            style={{ backgroundColor: layer.color || (layer.type === 'video' ? '#7c3aed' : '#4338ca') }}
-                            title="Change color"
-                          />
-                          {colorPickerLayerId === layer.id && (
-                            <div
-                              className="absolute left-0 top-5 z-50 bg-zinc-900 border border-zinc-700 rounded-lg p-2 shadow-2xl flex flex-wrap gap-1"
-                              style={{ width: 116 }}
-                              onClick={e => e.stopPropagation()}
-                            >
-                              {LAYER_COLORS.map(c => (
-                                <button key={c} onClick={() => { updateLayer(layer.id, { color: c }); setColorPickerLayerId(null); }}
-                                  className={`w-5 h-5 rounded border-2 transition-transform hover:scale-110 ${layer.color === c ? 'border-white' : 'border-transparent'}`}
-                                  style={{ backgroundColor: c }} />
-                              ))}
-                              <button onClick={() => { updateLayer(layer.id, { color: undefined }); setColorPickerLayerId(null); }}
-                                className="text-[7px] text-zinc-400 hover:text-white px-1 py-0.5 rounded bg-zinc-700/60 hover:bg-zinc-700 w-full text-center mt-0.5">reset</button>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Thumbnail */}
-                        <div className="w-7 h-7 rounded shrink-0 flex items-center justify-center border border-zinc-700/40 overflow-hidden bg-zinc-800">
-                          {layer.type === 'video' ? (
-                            <i className="fas fa-film text-[10px] text-violet-400" />
-                          ) : layer.src ? (
-                            <img src={layer.src} alt="" className="w-full h-full object-cover rounded" />
-                          ) : (
-                            <i className="fas fa-image text-[8px] text-zinc-400" />
-                          )}
-                        </div>
-
-                        {/* Name — double-click to rename */}
-                        {renamingLayerId === layer.id ? (
-                          <input
-                            autoFocus
-                            className="flex-1 min-w-0 bg-zinc-700 border border-violet-500 rounded px-1.5 py-0.5 text-sm text-white outline-none"
-                            value={layer.name}
-                            onChange={e => updateLayer(layer.id, { name: e.target.value })}
-                            onBlur={() => setRenamingLayerId(null)}
-                            onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') setRenamingLayerId(null); e.stopPropagation(); }}
-                            onClick={e => e.stopPropagation()}
-                          />
-                        ) : (
-                          <span
-                            className={`flex-1 min-w-0 truncate text-sm font-medium ${isSelected ? 'text-violet-300' : layer.visible ? 'text-zinc-200' : 'text-zinc-500 line-through'}`}
-                            onDoubleClick={e => { e.stopPropagation(); setRenamingLayerId(layer.id); }}
-                            title={layer.name + ' — double-click to rename'}
-                          >
-                            {layer.name}
-                          </span>
-                        )}
-                        {layer.chromaKey.enabled && <span className="text-[8px] px-1 py-0.5 rounded font-bold text-black shrink-0" style={{ backgroundColor: '#00fa15' }}>CK</span>}
-
-                        {/* Controls — always visible */}
-                        <div className="flex items-center gap-0.5 shrink-0">
-                          <button onClick={(e) => { e.stopPropagation(); updateLayer(layer.id, { visible: !layer.visible }); }}
-                            className={`w-7 h-7 flex items-center justify-center transition-colors ${layer.visible ? 'text-zinc-400 hover:text-white' : 'text-zinc-600 hover:text-zinc-400'}`} title="Toggle visibility">
-                            <i className={`fas ${layer.visible ? 'fa-eye' : 'fa-eye-slash'} text-sm`} />
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setExpandedOpacity(showOpacity ? null : layer.id); }}
-                            className={`w-7 h-7 flex items-center justify-center transition-colors ${showOpacity ? 'text-violet-400' : 'text-zinc-400 hover:text-white'}`}
-                            title={`Opacity ${Math.round(layer.opacity * 100)}%`}
-                          >
-                            <i className="fas fa-circle-half-stroke text-sm" />
-                          </button>
-                          {layer.type === 'video' && (
-                            <button onClick={(e) => { e.stopPropagation(); updateLayer(layer.id, { muted: !(layer.muted ?? false) }); }}
-                              className={`w-7 h-7 flex items-center justify-center transition-colors ${(layer.muted ?? false) ? 'text-zinc-600 hover:text-zinc-400' : 'text-zinc-400 hover:text-white'}`}
-                              title={layer.muted ? 'Unmute' : 'Mute'}>
-                              <i className={`fas ${(layer.muted ?? false) ? 'fa-volume-xmark' : 'fa-volume-high'} text-sm`} />
-                            </button>
-                          )}
-                          <button onClick={(e) => { e.stopPropagation(); updateLayer(layer.id, { locked: !layer.locked }); }}
-                            className={`w-7 h-7 flex items-center justify-center transition-colors ${layer.locked ? 'text-amber-400' : 'text-zinc-400 hover:text-amber-400'}`} title={layer.locked ? 'Unlock' : 'Lock'}>
-                            <i className={`fas ${layer.locked ? 'fa-lock' : 'fa-lock-open'} text-sm`} />
-                          </button>
-                          <button onClick={(e) => { e.stopPropagation(); duplicateLayer(layer.id); }} className="text-zinc-400 hover:text-white w-7 h-7 flex items-center justify-center transition-colors" title="Duplicate">
-                            <i className="fas fa-clone text-sm" />
-                          </button>
-                          <button onClick={(e) => { e.stopPropagation(); removeLayer(layer.id); }} className="text-zinc-400 hover:text-red-400 w-7 h-7 flex items-center justify-center transition-colors" title="Remove">
-                            <i className="fas fa-trash text-sm" />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Inline opacity slider */}
-                      {showOpacity && (
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800/60 border-b border-zinc-800/50">
-                          <span className="text-[9px] text-zinc-400 w-5 shrink-0">Op</span>
-                          <input
-                            type="range"
-                            min={0} max={100} step={1}
-                            value={Math.round(layer.opacity * 100)}
-                            onChange={e => updateLayer(layer.id, { opacity: Number(e.target.value) / 100 })}
-                            className="flex-1 accent-violet-500 h-1"
-                          />
-                          <span className="text-[9px] text-zinc-400 w-7 text-right">{Math.round(layer.opacity * 100)}%</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Selected layer properties */}
-          {selectedLayer && (
-            <div className="border-t border-zinc-800 p-3 flex flex-col gap-3 shrink-0 max-h-[45%] overflow-y-auto">
+        {/* Right panels: Properties (left) + Layers (right) */}
+        {/* Properties panel */}
+        <div className="w-[240px] border-l border-zinc-800 bg-zinc-900/50 shrink-0 overflow-y-auto banner-layers-scroll">
+          {selectedLayer ? (
+            <div className="p-3 flex flex-col gap-3">
               <div className="flex items-center justify-between">
                 <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Properties</h4>
                 <button onClick={() => fitLayerToCanvas(selectedLayer.id)} className="text-[9px] text-zinc-400 hover:text-violet-400 uppercase font-bold transition-colors">
@@ -1269,9 +1110,175 @@ export const Compositor: React.FC = () => {
                   </div>
                 )}
               </div>
-
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-full text-zinc-500 text-xs p-4 text-center">
+              <span><i className="fas fa-mouse-pointer mr-1.5" />Select a layer to see properties</span>
             </div>
           )}
+        </div>
+
+        {/* Layers panel */}
+        <div className="w-[260px] border-l border-zinc-800 flex flex-col bg-zinc-900/50 shrink-0 overflow-hidden">
+          {/* Add layer buttons */}
+          <div className="p-3 border-b border-zinc-800 flex gap-2">
+            <button onClick={() => setShowAssetPicker(true)} disabled={labAssets.length === 0}
+              className="flex-1 bg-violet-600/20 hover:bg-violet-600 border border-violet-500/30 text-violet-200 hover:text-white px-3 py-2 rounded-lg text-[10px] font-bold uppercase transition-colors flex items-center justify-center gap-1.5 disabled:opacity-30">
+              <i className="fas fa-folder-open" /> From Assets
+            </button>
+            <label className="flex-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 px-3 py-2 rounded-lg text-[10px] font-bold uppercase transition-colors flex items-center justify-center gap-1.5 cursor-pointer">
+              <i className="fas fa-upload" /> Upload
+              <input type="file" accept="image/*,video/*" className="hidden" onChange={handleFileUpload} />
+            </label>
+          </div>
+
+          {/* Layer list */}
+          <div className="flex-1 overflow-y-auto min-h-0 banner-layers-scroll">
+            <div className="p-2 text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-3">
+              Layers ({layers.length})
+            </div>
+            {layers.length === 0 ? (
+              <div className="p-6 text-center text-zinc-400 text-xs">
+                No layers yet.<br />Add videos or images.
+              </div>
+            ) : (
+              <div className="flex flex-col-reverse gap-0 px-2 pb-2">
+                {layers.map((layer, idx) => {
+                  const isSelected = selectedLayerId === layer.id;
+                  const showOpacity = expandedOpacity === layer.id;
+                  // Only visually dim once drag movement threshold is exceeded (ghost is showing)
+                  const isDragging = listDragId === layer.id && listGhostPos !== null;
+                  return (
+                    <div key={layer.id}>
+                      <div
+                        onClick={() => updateState({ selectedLayerId: isSelected ? null : layer.id })}
+                        onMouseDown={(e) => {
+                          // Don't start drag when interacting with buttons or inputs
+                          if ((e.target as HTMLElement).closest('button, input')) return;
+                          e.preventDefault();
+                          listDragStartYRef.current = e.clientY;
+                          setListDragId(layer.id);
+                        }}
+                        className={`flex items-center gap-1.5 px-2 py-1.5 cursor-grab active:cursor-grabbing border-b border-zinc-800/50 transition-colors ${
+                          isSelected ? 'bg-violet-600/25 ring-1 ring-inset ring-violet-500/40' : 'hover:bg-zinc-800/50'
+                        } ${isDragging ? 'opacity-30' : ''}`}
+                      >
+
+                        {/* Color square → opens color picker popover */}
+                        <div className="relative shrink-0">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setColorPickerLayerId(colorPickerLayerId === layer.id ? null : layer.id);
+                            }}
+                            className="w-4 h-4 rounded border border-zinc-600/50 hover:ring-2 hover:ring-white/40 transition-all"
+                            style={{ backgroundColor: layer.color || (layer.type === 'video' ? '#7c3aed' : '#4338ca') }}
+                            title="Change color"
+                          />
+                          {colorPickerLayerId === layer.id && (
+                            <div
+                              className="absolute left-0 top-5 z-50 bg-zinc-900 border border-zinc-700 rounded-lg p-2 shadow-2xl flex flex-wrap gap-1"
+                              style={{ width: 116 }}
+                              onClick={e => e.stopPropagation()}
+                            >
+                              {LAYER_COLORS.map(c => (
+                                <button key={c} onClick={() => { updateLayer(layer.id, { color: c }); setColorPickerLayerId(null); }}
+                                  className={`w-5 h-5 rounded border-2 transition-transform hover:scale-110 ${layer.color === c ? 'border-white' : 'border-transparent'}`}
+                                  style={{ backgroundColor: c }} />
+                              ))}
+                              <button onClick={() => { updateLayer(layer.id, { color: undefined }); setColorPickerLayerId(null); }}
+                                className="text-[7px] text-zinc-400 hover:text-white px-1 py-0.5 rounded bg-zinc-700/60 hover:bg-zinc-700 w-full text-center mt-0.5">reset</button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Thumbnail */}
+                        <div className="w-7 h-7 rounded shrink-0 flex items-center justify-center border border-zinc-700/40 overflow-hidden bg-zinc-800">
+                          {layer.type === 'video' ? (
+                            <i className="fas fa-film text-[10px] text-violet-400" />
+                          ) : layer.src ? (
+                            <img src={layer.src} alt="" className="w-full h-full object-cover rounded" />
+                          ) : (
+                            <i className="fas fa-image text-[8px] text-zinc-400" />
+                          )}
+                        </div>
+
+                        {/* Name — double-click to rename */}
+                        {renamingLayerId === layer.id ? (
+                          <input
+                            autoFocus
+                            className="flex-1 min-w-0 bg-zinc-700 border border-violet-500 rounded px-1.5 py-0.5 text-sm text-white outline-none"
+                            value={layer.name}
+                            onChange={e => updateLayer(layer.id, { name: e.target.value })}
+                            onBlur={() => setRenamingLayerId(null)}
+                            onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') setRenamingLayerId(null); e.stopPropagation(); }}
+                            onClick={e => e.stopPropagation()}
+                          />
+                        ) : (
+                          <span
+                            className={`flex-1 min-w-0 truncate text-sm font-medium ${isSelected ? 'text-violet-300' : layer.visible ? 'text-zinc-200' : 'text-zinc-500 line-through'}`}
+                            onDoubleClick={e => { e.stopPropagation(); setRenamingLayerId(layer.id); }}
+                            title={layer.name + ' — double-click to rename'}
+                          >
+                            {layer.name}
+                          </span>
+                        )}
+                        {layer.chromaKey.enabled && <span className="text-[8px] px-1 py-0.5 rounded font-bold text-black shrink-0" style={{ backgroundColor: '#00fa15' }}>CK</span>}
+
+                        {/* Controls — always visible */}
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <button onClick={(e) => { e.stopPropagation(); updateLayer(layer.id, { visible: !layer.visible }); }}
+                            className={`w-7 h-7 flex items-center justify-center transition-colors ${layer.visible ? 'text-zinc-400 hover:text-white' : 'text-zinc-600 hover:text-zinc-400'}`} title="Toggle visibility">
+                            <i className={`fas ${layer.visible ? 'fa-eye' : 'fa-eye-slash'} text-sm`} />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setExpandedOpacity(showOpacity ? null : layer.id); }}
+                            className={`w-7 h-7 flex items-center justify-center transition-colors ${showOpacity ? 'text-violet-400' : 'text-zinc-400 hover:text-white'}`}
+                            title={`Opacity ${Math.round(layer.opacity * 100)}%`}
+                          >
+                            <i className="fas fa-circle-half-stroke text-sm" />
+                          </button>
+                          {layer.type === 'video' && (
+                            <button onClick={(e) => { e.stopPropagation(); updateLayer(layer.id, { muted: !(layer.muted ?? false) }); }}
+                              className={`w-7 h-7 flex items-center justify-center transition-colors ${(layer.muted ?? false) ? 'text-zinc-600 hover:text-zinc-400' : 'text-zinc-400 hover:text-white'}`}
+                              title={layer.muted ? 'Unmute' : 'Mute'}>
+                              <i className={`fas ${(layer.muted ?? false) ? 'fa-volume-xmark' : 'fa-volume-high'} text-sm`} />
+                            </button>
+                          )}
+                          <button onClick={(e) => { e.stopPropagation(); updateLayer(layer.id, { locked: !layer.locked }); }}
+                            className={`w-7 h-7 flex items-center justify-center transition-colors ${layer.locked ? 'text-amber-400' : 'text-zinc-400 hover:text-amber-400'}`} title={layer.locked ? 'Unlock' : 'Lock'}>
+                            <i className={`fas ${layer.locked ? 'fa-lock' : 'fa-lock-open'} text-sm`} />
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); duplicateLayer(layer.id); }} className="text-zinc-400 hover:text-white w-7 h-7 flex items-center justify-center transition-colors" title="Duplicate">
+                            <i className="fas fa-clone text-sm" />
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); removeLayer(layer.id); }} className="text-zinc-400 hover:text-red-400 w-7 h-7 flex items-center justify-center transition-colors" title="Remove">
+                            <i className="fas fa-trash text-sm" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Inline opacity slider */}
+                      {showOpacity && (
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800/60 border-b border-zinc-800/50">
+                          <span className="text-[9px] text-zinc-400 w-5 shrink-0">Op</span>
+                          <input
+                            type="range"
+                            min={0} max={100} step={1}
+                            value={Math.round(layer.opacity * 100)}
+                            onChange={e => updateLayer(layer.id, { opacity: Number(e.target.value) / 100 })}
+                            className="flex-1 accent-violet-500 h-1"
+                          />
+                          <span className="text-[9px] text-zinc-400 w-7 text-right">{Math.round(layer.opacity * 100)}%</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
         </div>
       </div>
 

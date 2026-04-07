@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { VideoSegment, GeneratedClip, ReferenceAsset, SlotState, CharacterState, Crop, BackgroundState, SymbolGeneratorState, CompositorState, TimeFormat, SlotSkin, SkinIndexEntry } from '@/types';
-import { getSlotSkinIndex, getAllSlotSkins } from '@/services/skinDb';
+import { getSlotSkinIndex, getAllSlotSkins, putSlotSkin } from '@/services/skinDb';
+import { fetchAllSlotSkinsFromFiles, saveSlotSkinToFile } from '@/services/skinFileSync';
 
 interface ExtractorContextType {
   // Video source
@@ -184,10 +185,31 @@ export const ExtractorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [activeSlotSkinId, setActiveSlotSkinId] = useState<string | null>(null);
   const [slotSkinIndex, setSlotSkinIndex] = useState<SkinIndexEntry[]>(() => getSlotSkinIndex());
 
-  // Load full skins from IndexedDB on mount
+  // Load skins: merge file-synced skins (Dropbox) + IndexedDB, file wins on conflict
   useEffect(() => {
-    getAllSlotSkins().then(skins => {
-      if (skins.length > 0) setSlotSkins(skins);
+    Promise.all([
+      fetchAllSlotSkinsFromFiles().catch(() => [] as SlotSkin[]),
+      getAllSlotSkins().catch(() => [] as SlotSkin[]),
+    ]).then(([fileSkins, dbSkins]) => {
+      const merged = new Map<string, SlotSkin>();
+      // DB skins first (lower priority)
+      dbSkins.forEach(s => merged.set(s.id, s));
+      // File skins overwrite (higher priority - these sync via Dropbox)
+      fileSkins.forEach(s => merged.set(s.id, s));
+      const all = Array.from(merged.values()).sort((a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      if (all.length > 0) {
+        setSlotSkins(all);
+        // Sync file skins back to IndexedDB for fast future loads
+        const fileIds = new Set(fileSkins.map(s => s.id));
+        fileSkins.forEach(s => putSlotSkin(s).catch(console.error));
+        // Sync DB-only skins to files (so they sync to other machines via Dropbox)
+        dbSkins.filter(s => !fileIds.has(s.id)).forEach(s => saveSlotSkinToFile(s).catch(console.error));
+      }
+      // Build index
+      const index = all.map(s => ({ id: s.id, name: s.name, thumbnailUrl: s.thumbnailUrl, createdAt: s.createdAt }));
+      setSlotSkinIndex(index);
     }).catch(console.error);
   }, []);
 

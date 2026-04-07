@@ -50,8 +50,10 @@ const RESKIN_STAGES = [
   { key: 'export' as BannerStage, label: 'Export', icon: 'fa-download' },
 ];
 
+const FB_KICKOFF_KEYS = ['fb-feed', 'fb-square', 'fb-stories', 'fullhd-landscape'];
+
 export const BannersTab: React.FC = () => {
-  const { project, setStage, resetProject, activeCompositionId, setActiveCompositionId } = useBanner();
+  const { project, setStage, resetProject, activeCompositionId, setActiveCompositionId, generateCompositions } = useBanner();
   const currentStage = project?.stage ?? 'upload';
   const STAGES = project?.mode === 'reskin' ? RESKIN_STAGES : RESIZE_STAGES;
   const stageIndex = STAGES.findIndex(s => s.key === currentStage);
@@ -155,6 +157,42 @@ export const BannersTab: React.FC = () => {
                 Back to Sizes
               </button>
               <div className="flex items-center gap-2">
+                {(() => {
+                  const comps = project?.compositions ?? [];
+                  const touchedKickoffs = comps.filter(c =>
+                    FB_KICKOFF_KEYS.includes(c.presetKey) &&
+                    (c.status === 'edited' || c.status === 'approved')
+                  );
+                  const nonKickoffCount = comps.filter(c => !FB_KICKOFF_KEYS.includes(c.presetKey)).length;
+                  if (touchedKickoffs.length === 0 || nonKickoffCount === 0 || project?.isGenerating) return null;
+                  const targetKeys = comps
+                    .filter(c => !FB_KICKOFF_KEYS.includes(c.presetKey))
+                    .map(c => c.presetKey);
+                  return (
+                    <button
+                      onClick={() => {
+                        if (confirm(`Regenerate ${nonKickoffCount} banner(s) using the ${touchedKickoffs.length} edited primary banner(s) (FB Feed/Square/Stories/1920x1080) as AI reference?\n\nAny existing layouts on the other banners will be replaced with new AI designs that match your primary layouts.`)) {
+                          generateCompositions({ onlyKeys: targetKeys });
+                        }
+                      }}
+                      className="relative px-5 py-2 text-sm font-semibold bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 text-white rounded-lg transition-all shadow-lg shadow-purple-600/40 ring-2 ring-purple-400/50 hover:ring-purple-300/70 hover:scale-[1.02] flex items-center gap-2"
+                      title={`Regenerate ${nonKickoffCount} other banners using your ${touchedKickoffs.length} edited primary banner(s) as AI reference layouts`}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="1" y="9" width="7" height="6" rx="1.2" />
+                        <rect x="16" y="1" width="7" height="5.5" rx="1.2" />
+                        <rect x="16" y="9.25" width="7" height="5.5" rx="1.2" />
+                        <rect x="16" y="17.5" width="7" height="5.5" rx="1.2" />
+                        <path d="M8 12 H12 M12 4 V20 M12 4 H16 M12 12 H16 M12 20 H16" />
+                      </svg>
+                      Apply Primary Layouts to {nonKickoffCount} Others
+                      <span className="absolute -top-1.5 -right-1.5 flex h-3 w-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-fuchsia-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-fuchsia-500"></span>
+                      </span>
+                    </button>
+                  );
+                })()}
                 <button
                   onClick={() => setShowLuckyReskin(true)}
                   className="px-4 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-all shadow-lg shadow-purple-600/20 flex items-center gap-1.5"
@@ -193,15 +231,17 @@ export const BannersTab: React.FC = () => {
                 )}
               </div>
 
-              {/* Right side: Layers + Properties combined */}
-              <div className="w-72 shrink-0 flex flex-col border-l border-zinc-800">
-                <div className="flex-1 min-h-0 overflow-hidden">
-                  {activeComposition && <BannerLayerPanel composition={activeComposition} />}
-                </div>
-                <div className="shrink-0 max-h-[50%] overflow-auto border-t border-zinc-800">
-                  {activeComposition && <BannerProperties composition={activeComposition} />}
-                </div>
-              </div>
+              {/* Right side: Properties (left) + Layers (right, full height) */}
+              {activeComposition && (
+                <>
+                  <div className="w-64 shrink-0 overflow-auto border-l border-zinc-800">
+                    <BannerProperties composition={activeComposition} />
+                  </div>
+                  <div className="w-72 shrink-0 overflow-hidden border-l border-zinc-800">
+                    <BannerLayerPanel composition={activeComposition} />
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Composition strip + actions */}
