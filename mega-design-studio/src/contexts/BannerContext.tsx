@@ -11,7 +11,7 @@ import {
   SkinIndexEntry,
   BANNER_PRESETS,
 } from '@/types';
-import { generateBannerLayout } from '@/services/gemini';
+import { generateBannerLayout, generateTemplateLayout } from '@/services/gemini';
 import { renderCompositionToDataUrl } from '@/utils/renderComposition';
 import { getLayerZOrder } from '@/services/gemini/banner-rules';
 import { parallelBatch } from '@/services/parallelBatch';
@@ -585,11 +585,28 @@ export const BannerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // The AI receives reference images and detailed composition rules
     };
 
-    // --- Phase 1: ALL sizes go through AI layout ---
-    // AI layout understands composition rules, element hierarchy, and can properly
-    // rearrange elements for each target size. Deterministic scaling just shrinks
-    // the template which doesn't adapt the composition.
-    const needsAI: typeof presetsToGenerate = [...presetsToGenerate];
+    // --- Phase 1: Template-based layout for LANDSCAPE/PORTRAIT/SQUARE ---
+    // Uses exact positions measured from professional reference banners.
+    // AI layout only for STRIP banners (which need special handling).
+    const needsAI: typeof presetsToGenerate = [];
+
+    for (const preset of presetsToGenerate) {
+      const isStrip = preset.height <= 100 && preset.width / preset.height >= 3;
+      if (isStrip) {
+        needsAI.push(preset);
+        continue;
+      }
+
+      // Template-based layout — deterministic, no AI
+      const templateResult = generateTemplateLayout(elements, preset.width, preset.height, proj.shortenCTAs);
+      if (templateResult.length > 0) {
+        const comp = buildComposition(preset, templateResult);
+        postProcessComposition(comp);
+        newCompositions.push(comp);
+      } else {
+        needsAI.push(preset);
+      }
+    }
 
     // Single state update after all deterministic layouts are done (avoids N re-renders)
     if (newCompositions.length > 0) {

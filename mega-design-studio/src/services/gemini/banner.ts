@@ -1149,6 +1149,183 @@ CRITICAL RULES:
 };
 
 // ============================================================================
+// REFERENCE-BASED LAYOUT TEMPLATES — measured from professional banners
+// ============================================================================
+
+/** Position template: xPct, yPct = top-left corner %; wPct, hPct = size % of canvas */
+interface PosTemplate { xPct: number; yPct: number; wPct: number; hPct: number }
+
+const LAYOUT_TEMPLATES: Record<string, Record<string, PosTemplate | null>> = {
+  LANDSCAPE: {
+    ribbon:    { xPct: 0,  yPct: 0,  wPct: 8,   hPct: 13 },
+    logo:      { xPct: 86, yPct: 0,  wPct: 13,  hPct: 11 },
+    headline:  { xPct: 14, yPct: 0,  wPct: 57,  hPct: 19 },
+    bubble:    { xPct: 71, yPct: 11, wPct: 19,  hPct: 18 },
+    character: { xPct: 72, yPct: 21, wPct: 28,  hPct: 73 },
+    slot:      { xPct: 5,  yPct: 21, wPct: 54,  hPct: 65 },
+    cta:       { xPct: 18, yPct: 85, wPct: 42,  hPct: 13 },
+    coins:     { xPct: 54, yPct: 69, wPct: 21,  hPct: 31 },
+  },
+  PORTRAIT: {
+    ribbon:    { xPct: 0,  yPct: 0,  wPct: 12,  hPct: 6 },
+    logo:      { xPct: 42, yPct: 1,  wPct: 20,  hPct: 5 },
+    headline:  { xPct: 5,  yPct: 4,  wPct: 89,  hPct: 13 },
+    bubble:    { xPct: 48, yPct: 16, wPct: 32,  hPct: 9 },
+    character: { xPct: 40, yPct: 13, wPct: 50,  hPct: 31 },
+    slot:      { xPct: 2,  yPct: 40, wPct: 67,  hPct: 37 },
+    cta:       { xPct: 12, yPct: 86, wPct: 76,  hPct: 9 },
+    coins:     { xPct: 60, yPct: 68, wPct: 34,  hPct: 20 },
+  },
+  SQUARE: {
+    ribbon:    { xPct: 0,  yPct: 0,  wPct: 11,  hPct: 11 },
+    logo:      { xPct: 82, yPct: 0,  wPct: 17,  hPct: 10 },
+    headline:  { xPct: 9,  yPct: 2,  wPct: 74,  hPct: 18 },
+    bubble:    { xPct: 71, yPct: 18, wPct: 24,  hPct: 13 },
+    character: { xPct: 70, yPct: 28, wPct: 30,  hPct: 55 },
+    slot:      { xPct: 3,  yPct: 24, wPct: 65,  hPct: 54 },
+    cta:       { xPct: 15, yPct: 82, wPct: 68,  hPct: 14 },
+    coins:     { xPct: 53, yPct: 67, wPct: 38,  hPct: 33 },
+  },
+};
+
+function getLayoutCategory(w: number, h: number): string {
+  if (h <= 100 && w / h >= 3) return 'STRIP';
+  const r = w / h;
+  if (r > 1.2) return 'LANDSCAPE';
+  if (r < 0.9) return 'PORTRAIT';
+  return 'SQUARE';
+}
+
+function classifyElement(el: { label: string; role: string }): string {
+  const n = el.label.toLowerCase();
+  if (el.role === 'background') return 'background';
+  if (el.role === 'character') return 'character';
+  if (el.role === 'cta' || n.includes('cta')) return 'cta';
+  if (el.role === 'logo') return 'logo';
+  if (el.role === 'text' || n.includes('headline')) return 'headline';
+  if (n.includes('slot') || n.includes('reel') || n.includes('tray')) return 'slot';
+  if (n.includes('coin') || n.includes('gold')) return 'coins';
+  if (n.includes('speech') || n.includes('bubble')) return 'bubble';
+  if (n.includes('badge') || (n.includes('new') && el.role === 'decoration')) return 'ribbon';
+  return 'other';
+}
+
+/**
+ * Template-based layout: places elements at positions measured from reference banners.
+ * No AI needed — pure deterministic calculation from reference templates.
+ * Used for LANDSCAPE, PORTRAIT, SQUARE categories.
+ */
+export function generateTemplateLayout(
+  elements: ExtractedElement[],
+  targetWidth: number,
+  targetHeight: number,
+  shortenCTAs?: boolean,
+): Array<{ elementId: string; x: number; y: number; scaleX: number; scaleY: number; visible: boolean }> {
+  const W = targetWidth;
+  const H = targetHeight;
+  const cat = getLayoutCategory(W, H);
+  const tmpl = LAYOUT_TEMPLATES[cat];
+  if (!tmpl) return []; // strips handled separately
+
+  const results: Array<{ elementId: string; x: number; y: number; scaleX: number; scaleY: number; visible: boolean }> = [];
+  const usedClasses = new Set<string>();
+
+  // Determine which variant to use for each group
+  const isSlim = isNarrowBanner(W, H);
+  const isTall = isTallBanner(W, H);
+
+  for (const el of elements) {
+    const cls = classifyElement(el);
+
+    // Handle variants: pick the right one per group
+    if (el.variantOfId) {
+      // This is a variant — check if we should use it or the parent
+      const parent = elements.find(e => e.id === el.variantOfId);
+      if (parent) {
+        const parentCls = classifyElement(parent);
+        // Short CTA: use on slim/strip only
+        if (el.variantKind === 'short') {
+          if (!isSlim) { results.push({ elementId: el.id, x: 0, y: 0, scaleX: 0.1, scaleY: 0.1, visible: false }); continue; }
+        }
+        // 2-line headline: use on tall/portrait
+        if (el.variantKind === 'multiline') {
+          if (!isTall && cat !== 'PORTRAIT') { results.push({ elementId: el.id, x: 0, y: 0, scaleX: 0.1, scaleY: 0.1, visible: false }); continue; }
+        }
+      }
+    } else {
+      // This is a parent — check if a variant should replace it
+      const variants = elements.filter(e => e.variantOfId === el.id);
+      if (variants.length > 0) {
+        const shortVariant = variants.find(v => v.variantKind === 'short');
+        const multilineVariant = variants.find(v => v.variantKind === 'multiline');
+        // If slim and has short variant, hide the parent CTA
+        if (isSlim && shortVariant && cls === 'cta') {
+          results.push({ elementId: el.id, x: 0, y: 0, scaleX: 0.1, scaleY: 0.1, visible: false }); continue;
+        }
+        // If portrait and has multiline variant, hide the parent headline
+        if ((isTall || cat === 'PORTRAIT') && multilineVariant && cls === 'headline') {
+          results.push({ elementId: el.id, x: 0, y: 0, scaleX: 0.1, scaleY: 0.1, visible: false }); continue;
+        }
+      }
+    }
+
+    // Background: cover mode
+    if (cls === 'background') {
+      const coverScale = Math.max(W / el.nativeWidth, H / el.nativeHeight);
+      results.push({
+        elementId: el.id,
+        x: Math.round((W - el.nativeWidth * coverScale) / 2),
+        y: Math.round((H - el.nativeHeight * coverScale) / 2),
+        scaleX: coverScale, scaleY: coverScale, visible: true,
+      });
+      continue;
+    }
+
+    // Skip if this class was already placed (duplicate roles)
+    if (usedClasses.has(cls) && cls !== 'other') {
+      results.push({ elementId: el.id, x: 0, y: 0, scaleX: 0.1, scaleY: 0.1, visible: false });
+      continue;
+    }
+
+    const pos = tmpl[cls];
+    if (!pos) {
+      // Unknown element — place at center, small
+      results.push({ elementId: el.id, x: Math.round(W * 0.3), y: Math.round(H * 0.3), scaleX: 0.2, scaleY: 0.2, visible: true });
+      continue;
+    }
+
+    usedClasses.add(cls);
+
+    // Calculate target pixel size from template percentages
+    const targetW = W * pos.wPct / 100;
+    const targetH = H * pos.hPct / 100;
+    // Uniform scale: fit element into the template box
+    const scale = Math.min(targetW / el.nativeWidth, targetH / el.nativeHeight);
+    const actualW = el.nativeWidth * scale;
+    const actualH = el.nativeHeight * scale;
+
+    // Position: center the element within the template box
+    const boxX = W * pos.xPct / 100;
+    const boxY = H * pos.yPct / 100;
+    const x = Math.round(boxX + (targetW - actualW) / 2);
+    const y = Math.round(boxY + (targetH - actualH) / 2);
+
+    // Ribbon always flush to (0,0)
+    const finalX = cls === 'ribbon' ? 0 : x;
+    const finalY = cls === 'ribbon' ? 0 : y;
+
+    results.push({
+      elementId: el.id,
+      x: finalX, y: finalY,
+      scaleX: scale, scaleY: scale,
+      visible: true,
+    });
+  }
+
+  return results;
+}
+
+// ============================================================================
 // AI-DRIVEN LAYOUT ENGINE — Gemini designs each composition individually
 // ============================================================================
 
