@@ -28,48 +28,78 @@ CRITICAL: When a REFERENCE LAYOUT is provided, its layer order is the GROUND TRU
 // LAYOUT RULES — GENERAL
 // ════════════════════════════════════════════════════════════════
 export const LAYOUT_RULES_GENERAL = `
-LAYOUT RULES (follow these strictly):
-1. REFERENCE THE SOURCE: Always look at the source banner positions. If elements are aligned in the source (e.g. CTA aligned with game shot), they should remain aligned in resizes.
-2. CORNER RIBBONS — NEVER HIDDEN: If a "NEW" ribbon or any ribbon appears in a corner of the source image, it MUST be placed flush against that same corner in ALL resizes. No gap between ribbon and corner edge. CRITICAL: No other element may overlap or cover the ribbon — it must always be fully visible on top. Reduce the size of neighboring elements if needed to keep the ribbon unobstructed.
-3. COMPANY LOGO — NEVER HIDDEN: The company/brand logo MUST always be fully visible in every size. No element may overlap, cover, or obscure the logo. If the logo is in a corner, keep it in that corner. Scale neighboring elements DOWN if they would overlap the logo. The logo is sacred — treat it as untouchable.
-4. CTA PROMINENCE + MARGINS: The CTA button must always be clearly visible, never obscured by other elements. CRITICAL: The CTA must have at least 5% margin from ALL canvas edges — it must NEVER touch or nearly touch the border. On portrait/tall banners, the CTA sits in the lower third but NOT at the very bottom edge.
-5. CHARACTER COMPLETENESS: On standard (non-strip) banners, the character should not be cropped. Show the full character.
-6. COINS — GROUND LEVEL, NEVER FLOATING: Coin piles MUST be placed at the BOTTOM of the canvas, sitting on the ground. Their y position must place them in the bottom ~20% of the canvas height. Coins should NEVER float in the middle or upper area of the canvas. They are decorative background elements — keep them small (no more than ~25% of canvas width) and behind all foreground elements. Think of coins as scattered on the floor beneath the main composition.
-7. CHARACTER FACE VISIBILITY — NEVER HIDDEN: A character's face must NEVER be hidden or covered by ANY other element (text, logo, CTA, decorations, speech bubbles, game shots, slot machines). The face is approximately the top 30% of the character element. Speech bubbles must be positioned ABOVE or BESIDE the character's head — never overlapping the face area. Other elements CAN overlap the character's body/torso/legs, but the FACE must remain 100% visible. If a speech bubble would cover the face, move it higher or to the side. This is non-negotiable.
-8. CTA COUNT: Typically one CTA per design, but choice-based concepts may have 2 CTAs. Style/shape/color must match across CTAs within the same concept.
-9. ELEMENT SIZING — NO OVERSIZED ELEMENTS: When adapting to a smaller canvas, scale elements DOWN proportionally. Do NOT let any single element (especially game shots or characters) take up more than ~50% of the canvas width or ~50% of the canvas height (except background). The character should be ~30-40% of canvas height on standard banners, ~25-35% on small banners. The logo should be ~10-15% of canvas width — NEVER oversized. Leave room for all elements to breathe. Elements should be sized relative to the canvas so the composition looks balanced, not cramped or oversized.
-10. OVERLAP CONTROL: Elements should overlap minimally. If two foreground elements would overlap more than ~20% of either's area, reduce the size of the less important one. Priority order for space: Text > Character > Game Shot > CTA > Decorations > Logo. On portrait banners (768x1024, 1080x1350, etc.) elements must be stacked vertically with clear separation — do NOT pile elements on top of each other.
-11. ALL ELEMENTS MUST FIT WITHIN CANVAS: Every element must be fully visible within the canvas boundaries. No element's visible content should extend beyond the canvas edges. If an element would be cropped, scale it DOWN or reposition it inward. The only exception is background (which uses cover-crop mode).
-12. HEADLINE MUST NOT COVER RIBBONS: If there is a corner ribbon (e.g. "NEW"), the headline text must be positioned below or away from it — never overlapping. Reduce headline size or shift it down if it would conflict with the ribbon.
-13. CHARACTER MUST NOT COVER SLOT MACHINE: The character should be positioned beside the slot machine, not in front of it. On square and landscape banners, character goes to the right of the slot. On portrait banners, character can be above or beside the slot. The slot/game screenshot must always be clearly visible.
+LAYOUT RULES — follow these EXACT position templates measured from professional reference banners.
+Each element position is given as percentage of canvas (xPct, yPct = top-left corner; wPct, hPct = size).
+Place each element AT these positions. This is NOT a suggestion — these are measured from real designs.
+
+LANDSCAPE TEMPLATE (for banners wider than tall, ratio > 1.2):
+  Ribbon:         x:0%   y:0%   w:8%   h:13%  (flush top-left corner)
+  Logo:           x:86%  y:0%   w:13%  h:11%  (top-right corner, small)
+  Headline:       x:14%  y:0%   w:57%  h:19%  (top, spanning above slot)
+  Speech Bubble:  x:71%  y:11%  w:19%  h:18%  (near character head)
+  Character:      x:72%  y:21%  w:28%  h:73%  (RIGHT side, large, overlapping slot from front)
+  Slot/Reel:      x:5%   y:21%  w:54%  h:65%  (LEFT-CENTER, prominent)
+  CTA:            x:18%  y:85%  w:42%  h:13%  (bottom-center)
+  Coins:          x:54%  y:69%  w:21%  h:31%  (bottom, decorative, can overflow)
+
+PORTRAIT TEMPLATE (for banners taller than wide, ratio < 0.9):
+  Ribbon:         x:0%   y:0%   w:12%  h:6%   (flush top-left corner)
+  Logo:           x:42%  y:1%   w:20%  h:5%   (top area, can be top-right)
+  Headline:       x:5%   y:4%   w:89%  h:13%  (top, wide, bold)
+  Speech Bubble:  x:48%  y:16%  w:32%  h:9%   (near character head)
+  Character:      x:40%  y:13%  w:50%  h:31%  (upper-mid, RIGHT of slot, large)
+  Slot/Reel:      x:2%   y:40%  w:67%  h:37%  (center area, prominent)
+  CTA:            x:12%  y:86%  w:76%  h:9%   (bottom, wide)
+  Coins:          x:60%  y:68%  w:34%  h:20%  (bottom-right, decorative)
+
+SQUARE TEMPLATE (for banners with ratio 0.9-1.2, including 300x250, 336x280):
+  Ribbon:         x:0%   y:0%   w:11%  h:11%  (flush top-left)
+  Logo:           x:82%  y:0%   w:17%  h:10%  (top-right, small)
+  Headline:       x:9%   y:2%   w:74%  h:18%  (top, bold)
+  Speech Bubble:  x:71%  y:18%  w:24%  h:13%  (right side, near character)
+  Character:      x:70%  y:28%  w:30%  h:55%  (RIGHT side, overlapping slot)
+  Slot/Reel:      x:3%   y:24%  w:65%  h:54%  (center-left, large)
+  CTA:            x:15%  y:82%  w:68%  h:14%  (bottom, wide)
+  Coins:          x:53%  y:67%  w:38%  h:33%  (bottom, decorative overflow)
+
+CRITICAL RULES:
+- Character is ALWAYS on the RIGHT side, in front of/overlapping the slot. This is intentional.
+- Slot/reel is ALWAYS left or center-left. It is the main visual element.
+- The composition should feel FULL and DENSE — this is a gaming ad.
+- Coins can overflow the bottom canvas edge.
+- Ribbon is ALWAYS at (0,0) flush to top-left corner.
+- Logo is small (10-17% width). NEVER make the logo large.
+- Character face must NOT be covered by other elements.
 `;
 
 // ════════════════════════════════════════════════════════════════
 // LAYOUT RULES — WIDE STRIP BANNERS
 // ════════════════════════════════════════════════════════════════
 export const LAYOUT_RULES_STRIP = `
-STRIP BANNER LAYOUT (for 300x50, 320x50, 468x60, 728x90):
-These banners follow a strict LEFT-TO-RIGHT structure. All elements are vertically centered.
+STRIP BANNER LAYOUT — measured from professional reference banners:
 
-LEFT-TO-RIGHT ORDER:
-1. RIBBON (if present): Flush against TOP-LEFT corner, scaled to take most of the banner height. On these tiny sizes the ribbon is a key brand marker.
-2. LOGO: Immediately to the RIGHT of the ribbon. Scaled to fit the strip height (~70-80% of height).
-3. HEADLINE + CHARACTER CLOSEUP: In the CENTER area. The headline text is prominent and readable. The character is shown as a BUST/FACE CLOSEUP only — cropped from chest up. Character and headline can overlap slightly (character behind text).
-4. SPEECH BUBBLE: ONLY on 728x90 (the largest strip). On 300x50, 320x50, 468x60 there is NO speech bubble — hide it (visible: false).
-5. CTA: RIGHT edge. SHORT text version (e.g. "SPIN" not "SPIN NOW"). Vertically centered.
+STRIP TEMPLATE (for 300x50, 320x50, 468x60, 728x90):
+  Ribbon:     x:0%   y:0%   w:8%   h:46%  (top-left corner)
+  Logo:       x:8%   y:3%   w:13%  h:54%  (right of ribbon)
+  Headline:   x:22%  y:5%   w:44%  h:77%  (center, LARGE and readable)
+  Character:  x:64%  y:7%   w:21%  h:89%  (bust/closeup, right of headline)
+  CTA:        x:85%  y:13%  w:14%  h:72%  (right edge, SHORT text)
 
-STRIP BANNER EXCLUSIONS (these elements are HIDDEN on ALL strip banners):
-- Game shot / slot machine / screenshot → visible: false
-- Coin piles → visible: false
-- Decorations → visible: false
+728x90 ONLY — also show:
+  Speech Bubble: x:60% y:0% w:18% h:65% (between headline and character)
+
+HIDDEN on ALL strip banners:
+- Slot machine / game screenshots → visible: false
+- Coin piles → visible: false (except 728x90 and 468x60 where decorative coins at bottom-center are OK)
+- Decorations (except ribbon) → visible: false
 - Speech bubble → visible: false EXCEPT on 728x90
 
-CRITICAL STRIP RULES:
-- NO slot machine or game screenshot on ANY strip banner
-- NO coins on strip banners
-- Character is ALWAYS cropped to face/bust — never full body
-- All elements vertically centered within the strip height
-- Text must be readable at the small strip height — scale it to ~60-80% of banner height
+320x100 SPECIAL — wider strip, slightly different layout:
+  Ribbon:     x:0%   y:0%   w:8%   h:30%
+  Logo:       x:82%  y:0%   w:16%  h:25%  (top-right, NOT left like other strips)
+  Headline:   x:15%  y:5%   w:50%  h:50%
+  Character:  x:65%  y:10%  w:25%  h:85%
+  CTA:        x:20%  y:60%  w:25%  h:30%  (below headline, not right-edge)
 `;
 
 // ════════════════════════════════════════════════════════════════
