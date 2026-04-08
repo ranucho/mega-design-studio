@@ -646,32 +646,44 @@ export const BannerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               item.visible = false;
             }
 
-            // Smaller logo (shrink by 30%)
+            // Logo — 25% bigger than base scale, flush to top-right
             if (el.role === 'logo') {
-              item.scaleX *= 0.7;
-              item.scaleY *= 0.7;
+              item.scaleX *= 0.7 * 1.25;
+              item.scaleY *= 0.7 * 1.25;
               const logoW = el.nativeWidth * item.scaleX;
               item.x = Math.round(W - logoW - W * 0.02);
             }
 
-            // Tighter top spacing — move headline closer to top
+            // Headline — center horizontally, tighter top spacing
             if (el.role === 'text' || el.label.toLowerCase().includes('headline')) {
               item.y = Math.max(0, item.y - Math.round(H * 0.03));
+              const headW = el.nativeWidth * item.scaleX;
+              item.x = Math.round((W - headW) / 2);
             }
 
-            // Slot machine — shift down slightly
+            // Slot machine — 15% bigger than base, move up 18px, center horizontally
             const isSlot = el.label.toLowerCase().includes('slot') || el.label.toLowerCase().includes('reel') || el.label.toLowerCase().includes('tray');
             if (isSlot) {
-              item.y += Math.round(H * 0.08);
+              item.scaleX *= 1.125;
+              item.scaleY *= 1.125;
+              item.y -= 4;
+              const slotW = el.nativeWidth * item.scaleX;
+              item.x = Math.round((W - slotW) / 2);
             }
 
-            // CTA — position at same bottom margin as other square banners (~2% from bottom)
-            // This naturally creates overlap with the slot above
+            // Speech bubble — 40% bigger
+            if (el.label.toLowerCase().includes('speech') || el.label.toLowerCase().includes('bubble')) {
+              item.scaleX *= 1.40;
+              item.scaleY *= 1.40;
+            }
+
+            // CTA — 15% bigger, center horizontally, 2% from bottom
             if (el.role === 'cta' || el.label.toLowerCase().includes('cta')) {
+              item.scaleX *= 1.15;
+              item.scaleY *= 1.15;
               const ctaH = el.nativeHeight * item.scaleY;
               const ctaW = el.nativeWidth * item.scaleX;
               item.y = Math.round(H - ctaH - H * 0.02);
-              // Center horizontally
               item.x = Math.round((W - ctaW) / 2);
             }
           }
