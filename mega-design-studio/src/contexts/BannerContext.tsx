@@ -11,7 +11,7 @@ import {
   SkinIndexEntry,
   BANNER_PRESETS,
 } from '@/types';
-import { generateBannerLayout, generateTemplateLayout } from '@/services/gemini';
+import { generateBannerLayout } from '@/services/gemini';
 import { renderCompositionToDataUrl } from '@/utils/renderComposition';
 import { getLayerZOrder } from '@/services/gemini/banner-rules';
 import { parallelBatch } from '@/services/parallelBatch';
@@ -554,58 +554,31 @@ export const BannerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       };
     };
 
-    // --- Minimal post-process: only enforce critical constraints, let AI decisions stand ---
-    const postProcessComposition = (comp: BannerComposition) => {
-      const W = comp.width;
-      const H = comp.height;
-      const isStrip = H <= 100 && W / H >= 3;
-      if (isStrip) return; // strips handled in banner.ts
-
-      const layersByRole = (role: string) => comp.layers.filter(l => l.visible !== false && l.role === role);
-      const layerByName = (match: string) => comp.layers.find(l => l.visible !== false && l.name.toLowerCase().includes(match));
-
-      // CTA: ensure not touching canvas edges (3% margin minimum)
-      for (const l of layersByRole('cta')) {
-        const ctaW = l.nativeWidth * l.scaleX;
-        const ctaH = l.nativeHeight * l.scaleY;
-        const m = Math.max(4, W * 0.03);
-        if (l.y + ctaH > H - m) l.y = Math.round(H - ctaH - m);
-        if (l.x < m) l.x = Math.round(m);
-        if (l.x + ctaW > W - m) l.x = Math.round(W - ctaW - m);
-      }
-
-      // Ribbon: flush to corner
-      const ribbon = layerByName('badge') || layerByName('new');
-      if (ribbon && ribbon.role === 'decoration') {
-        ribbon.x = 0;
-        ribbon.y = 0;
-      }
-
-      // Let AI handle element placement — no further corrections needed
-      // The AI receives reference images and detailed composition rules
-    };
-
-    // --- Phase 1: Template-based layout for LANDSCAPE/PORTRAIT/SQUARE ---
-    // Uses exact positions measured from professional reference banners.
-    // AI layout only for STRIP banners (which need special handling).
+    // --- Phase 1: Deterministic scaling for SAME ORIENTATION templates ---
+    // When template and target are both landscape (or both portrait), pure proportional
+    // scaling preserves the design perfectly. No AI needed.
     const needsAI: typeof presetsToGenerate = [];
 
     for (const preset of presetsToGenerate) {
-      const isStrip = preset.height <= 100 && preset.width / preset.height >= 3;
-      if (isStrip) {
-        needsAI.push(preset);
-        continue;
-      }
+      const pseudoTarget: BannerComposition = {
+        id: '__pending__', name: preset.name, presetKey: preset.key,
+        width: preset.width, height: preset.height, layers: [],
+        selectedLayerId: null, backgroundColor: '#000000', warnings: [], status: 'pending',
+      };
+      const template = findLayoutTemplate(pseudoTarget, [...existingComps, ...newCompositions]);
 
-      // Template-based layout — deterministic, no AI
-      const templateResult = generateTemplateLayout(elements, preset.width, preset.height, proj.shortenCTAs);
-      if (templateResult.length > 0) {
-        const comp = buildComposition(preset, templateResult);
-        postProcessComposition(comp);
-        newCompositions.push(comp);
-      } else {
-        needsAI.push(preset);
+      if (template && isSameOrientation(template.width, template.height, preset.width, preset.height)) {
+        // Same orientation → deterministic proportional scaling (instant, no AI)
+        const scaled = scaleLayoutFromTemplate(template, preset.width, preset.height, elements);
+        if (scaled.length > 0) {
+          const comp = buildComposition(preset, scaled);
+          enforceTemplateLayerOrder(comp, template);
+          newCompositions.push(comp);
+          continue;
+        }
       }
+      // Different orientation or no template → needs AI
+      needsAI.push(preset);
     }
 
     // Single state update after all deterministic layouts are done (avoids N re-renders)
@@ -660,7 +633,6 @@ export const BannerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           if (result.template) {
             enforceTemplateLayerOrder(comp, result.template);
           }
-          postProcessComposition(comp);
           newCompositions.push(comp);
           // Update state after each result so the gallery shows progress
           // Use setTimeout(0) to yield to the renderer between heavy updates

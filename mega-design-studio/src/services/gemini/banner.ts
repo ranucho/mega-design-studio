@@ -1149,183 +1149,6 @@ CRITICAL RULES:
 };
 
 // ============================================================================
-// REFERENCE-BASED LAYOUT TEMPLATES — measured from professional banners
-// ============================================================================
-
-/** Position template: xPct, yPct = top-left corner %; wPct, hPct = size % of canvas */
-interface PosTemplate { xPct: number; yPct: number; wPct: number; hPct: number }
-
-const LAYOUT_TEMPLATES: Record<string, Record<string, PosTemplate | null>> = {
-  LANDSCAPE: {
-    ribbon:    { xPct: 0,  yPct: 0,  wPct: 8,   hPct: 13 },
-    logo:      { xPct: 86, yPct: 0,  wPct: 13,  hPct: 11 },
-    headline:  { xPct: 14, yPct: 0,  wPct: 57,  hPct: 19 },
-    bubble:    { xPct: 71, yPct: 11, wPct: 19,  hPct: 18 },
-    character: { xPct: 72, yPct: 21, wPct: 28,  hPct: 73 },
-    slot:      { xPct: 5,  yPct: 21, wPct: 54,  hPct: 65 },
-    cta:       { xPct: 18, yPct: 85, wPct: 42,  hPct: 13 },
-    coins:     { xPct: 54, yPct: 69, wPct: 21,  hPct: 31 },
-  },
-  PORTRAIT: {
-    ribbon:    { xPct: 0,  yPct: 0,  wPct: 12,  hPct: 6 },
-    logo:      { xPct: 42, yPct: 1,  wPct: 20,  hPct: 5 },
-    headline:  { xPct: 5,  yPct: 4,  wPct: 89,  hPct: 13 },
-    bubble:    { xPct: 48, yPct: 16, wPct: 32,  hPct: 9 },
-    character: { xPct: 40, yPct: 13, wPct: 50,  hPct: 31 },
-    slot:      { xPct: 2,  yPct: 40, wPct: 67,  hPct: 37 },
-    cta:       { xPct: 12, yPct: 86, wPct: 76,  hPct: 9 },
-    coins:     { xPct: 60, yPct: 68, wPct: 34,  hPct: 20 },
-  },
-  SQUARE: {
-    ribbon:    { xPct: 0,  yPct: 0,  wPct: 11,  hPct: 11 },
-    logo:      { xPct: 82, yPct: 0,  wPct: 17,  hPct: 10 },
-    headline:  { xPct: 9,  yPct: 2,  wPct: 74,  hPct: 18 },
-    bubble:    { xPct: 71, yPct: 18, wPct: 24,  hPct: 13 },
-    character: { xPct: 70, yPct: 28, wPct: 30,  hPct: 55 },
-    slot:      { xPct: 3,  yPct: 24, wPct: 65,  hPct: 54 },
-    cta:       { xPct: 15, yPct: 82, wPct: 68,  hPct: 14 },
-    coins:     { xPct: 53, yPct: 67, wPct: 38,  hPct: 33 },
-  },
-};
-
-function getLayoutCategory(w: number, h: number): string {
-  if (h <= 100 && w / h >= 3) return 'STRIP';
-  const r = w / h;
-  if (r > 1.2) return 'LANDSCAPE';
-  if (r < 0.9) return 'PORTRAIT';
-  return 'SQUARE';
-}
-
-function classifyElement(el: { label: string; role: string }): string {
-  const n = el.label.toLowerCase();
-  if (el.role === 'background') return 'background';
-  if (el.role === 'character') return 'character';
-  if (el.role === 'cta' || n.includes('cta')) return 'cta';
-  if (el.role === 'logo') return 'logo';
-  if (el.role === 'text' || n.includes('headline')) return 'headline';
-  if (n.includes('slot') || n.includes('reel') || n.includes('tray')) return 'slot';
-  if (n.includes('coin') || n.includes('gold')) return 'coins';
-  if (n.includes('speech') || n.includes('bubble')) return 'bubble';
-  if (n.includes('badge') || (n.includes('new') && el.role === 'decoration')) return 'ribbon';
-  return 'other';
-}
-
-/**
- * Template-based layout: places elements at positions measured from reference banners.
- * No AI needed — pure deterministic calculation from reference templates.
- * Used for LANDSCAPE, PORTRAIT, SQUARE categories.
- */
-export function generateTemplateLayout(
-  elements: ExtractedElement[],
-  targetWidth: number,
-  targetHeight: number,
-  shortenCTAs?: boolean,
-): Array<{ elementId: string; x: number; y: number; scaleX: number; scaleY: number; visible: boolean }> {
-  const W = targetWidth;
-  const H = targetHeight;
-  const cat = getLayoutCategory(W, H);
-  const tmpl = LAYOUT_TEMPLATES[cat];
-  if (!tmpl) return []; // strips handled separately
-
-  const results: Array<{ elementId: string; x: number; y: number; scaleX: number; scaleY: number; visible: boolean }> = [];
-  const usedClasses = new Set<string>();
-
-  // Determine which variant to use for each group
-  const isSlim = isNarrowBanner(W, H);
-  const isTall = isTallBanner(W, H);
-
-  for (const el of elements) {
-    const cls = classifyElement(el);
-
-    // Handle variants: pick the right one per group
-    if (el.variantOfId) {
-      // This is a variant — check if we should use it or the parent
-      const parent = elements.find(e => e.id === el.variantOfId);
-      if (parent) {
-        const parentCls = classifyElement(parent);
-        // Short CTA: use on slim/strip only
-        if (el.variantKind === 'short') {
-          if (!isSlim) { results.push({ elementId: el.id, x: 0, y: 0, scaleX: 0.1, scaleY: 0.1, visible: false }); continue; }
-        }
-        // 2-line headline: use on tall/portrait
-        if (el.variantKind === 'multiline') {
-          if (!isTall && cat !== 'PORTRAIT') { results.push({ elementId: el.id, x: 0, y: 0, scaleX: 0.1, scaleY: 0.1, visible: false }); continue; }
-        }
-      }
-    } else {
-      // This is a parent — check if a variant should replace it
-      const variants = elements.filter(e => e.variantOfId === el.id);
-      if (variants.length > 0) {
-        const shortVariant = variants.find(v => v.variantKind === 'short');
-        const multilineVariant = variants.find(v => v.variantKind === 'multiline');
-        // If slim and has short variant, hide the parent CTA
-        if (isSlim && shortVariant && cls === 'cta') {
-          results.push({ elementId: el.id, x: 0, y: 0, scaleX: 0.1, scaleY: 0.1, visible: false }); continue;
-        }
-        // If portrait and has multiline variant, hide the parent headline
-        if ((isTall || cat === 'PORTRAIT') && multilineVariant && cls === 'headline') {
-          results.push({ elementId: el.id, x: 0, y: 0, scaleX: 0.1, scaleY: 0.1, visible: false }); continue;
-        }
-      }
-    }
-
-    // Background: cover mode
-    if (cls === 'background') {
-      const coverScale = Math.max(W / el.nativeWidth, H / el.nativeHeight);
-      results.push({
-        elementId: el.id,
-        x: Math.round((W - el.nativeWidth * coverScale) / 2),
-        y: Math.round((H - el.nativeHeight * coverScale) / 2),
-        scaleX: coverScale, scaleY: coverScale, visible: true,
-      });
-      continue;
-    }
-
-    // Skip if this class was already placed (duplicate roles)
-    if (usedClasses.has(cls) && cls !== 'other') {
-      results.push({ elementId: el.id, x: 0, y: 0, scaleX: 0.1, scaleY: 0.1, visible: false });
-      continue;
-    }
-
-    const pos = tmpl[cls];
-    if (!pos) {
-      // Unknown element — place at center, small
-      results.push({ elementId: el.id, x: Math.round(W * 0.3), y: Math.round(H * 0.3), scaleX: 0.2, scaleY: 0.2, visible: true });
-      continue;
-    }
-
-    usedClasses.add(cls);
-
-    // Calculate target pixel size from template percentages
-    const targetW = W * pos.wPct / 100;
-    const targetH = H * pos.hPct / 100;
-    // Uniform scale: fit element into the template box
-    const scale = Math.min(targetW / el.nativeWidth, targetH / el.nativeHeight);
-    const actualW = el.nativeWidth * scale;
-    const actualH = el.nativeHeight * scale;
-
-    // Position: center the element within the template box
-    const boxX = W * pos.xPct / 100;
-    const boxY = H * pos.yPct / 100;
-    const x = Math.round(boxX + (targetW - actualW) / 2);
-    const y = Math.round(boxY + (targetH - actualH) / 2);
-
-    // Ribbon always flush to (0,0)
-    const finalX = cls === 'ribbon' ? 0 : x;
-    const finalY = cls === 'ribbon' ? 0 : y;
-
-    results.push({
-      elementId: el.id,
-      x: finalX, y: finalY,
-      scaleX: scale, scaleY: scale,
-      visible: true,
-    });
-  }
-
-  return results;
-}
-
-// ============================================================================
 // AI-DRIVEN LAYOUT ENGINE — Gemini designs each composition individually
 // ============================================================================
 
@@ -1444,11 +1267,9 @@ ${sizeSpecificRules ? `\nSIZE-SPECIFIC RULES:\n${sizeSpecificRules}\n` : ''}
 Return a JSON array with one entry per element:
 [{ "elementId": "...", "x": number, "y": number, "scaleX": number, "scaleY": number, "visible": boolean }]
 
-CRITICAL — USE THE POSITION TEMPLATES: The layout rules above contain EXACT percentage positions measured from professional reference banners. Place each element AT those positions. Adapt slightly for the specific canvas dimensions but stay within ~5% of the template values. Do NOT invent your own layout — follow the template.
+CRITICAL — NO DEAD SPACE: The composition MUST fill the ENTIRE ${targetWidth}×${targetHeight} canvas. Do NOT leave empty/unused areas on any side. Distribute elements to cover the canvas. If the reference template has a different aspect ratio, REDISTRIBUTE elements to fill the new shape rather than simply centering them with gaps.
 
-CRITICAL — MATCH THE REFERENCES: If reference images are provided, replicate their composition style EXACTLY — element sizes, positions, overlaps, and visual density. The references are the ground truth.
-
-CRITICAL — LOGO MUST BE SMALL: The company logo must be 10-17% of canvas width maximum. NEVER make it larger. On landscape, it goes top-right. On strips, it goes left after the ribbon.
+CRITICAL — BALANCED SIZING: On a ${targetWidth}×${targetHeight} canvas, scale elements to fit proportionally. No single foreground element should exceed ~55% of the canvas width AND ~55% of the canvas height (except background). If the source banner is much larger, you MUST scale elements DOWN significantly. Think about what looks good at THIS canvas size — a game screenshot that fills 80% of a 1200px banner should only fill ~40-50% of a 320px banner. Leave breathing room between elements.
 
 CRITICAL — ARRAY ORDER IS Z-INDEX: Return elements in BACK-TO-FRONT order. First element = bottommost layer (background), last element = topmost layer (CTA/foreground). This order defines the visual stacking. If a reference template is provided, match its layer order EXACTLY.
 
@@ -1576,7 +1397,6 @@ Only deviate from the references when the aspect ratio absolutely forces it (e.g
     const isStripBanner = isStrip;
 
     // Strip banners: force-hide slots, coins, decorations, and bubbles (except 728x90 for bubbles)
-    // Force-SHOW logo, ribbon/badge, headline, character, CTA, background
     if (isStripBanner) {
       for (const layout of results) {
         const el = elements.find(e => e.id === layout.elementId);
@@ -1589,105 +1409,6 @@ Only deviate from the references when the aspect ratio absolutely forces it (e.g
 
         if (isSlot || isCoin || isDecoration) layout.visible = false;
         if (isBubble && !is728x90) layout.visible = false;
-
-        // Force logo VISIBLE on strip banners (AI sometimes hides it)
-        if (el.role === 'logo') layout.visible = true;
-      }
-
-      // --- STRIP LAYOUT ENFORCEMENT: left-to-right flow ---
-      // Ribbon→Logo→Headline+Character→CTA(right)
-      // Elements should fill ~70-80% of strip height, vertically centered
-      const stripH = targetHeight;
-      const stripW = targetWidth;
-      const fillH = stripH * 0.75; // target element height
-
-      for (const layout of results) {
-        const el = elements.find(e => e.id === layout.elementId);
-        if (!el || el.role === 'background' || !layout.visible) continue;
-        const ll = el.label.toLowerCase();
-
-        // Scale all visible strip elements to fill ~75% of strip height
-        const isRibbon = ll.includes('ribbon') || ll.includes('badge') || ll.includes('new');
-        const isLogo = el.role === 'logo';
-        const isChar = el.role === 'character';
-        const isCTA = el.role === 'cta' || ll.includes('cta') || ll.includes('button');
-        const isText = el.role === 'text';
-
-        if (isRibbon || isLogo || isChar || isCTA) {
-          const targetElemH = isRibbon ? stripH * 0.80 : fillH;
-          const scale = targetElemH / el.nativeHeight;
-          layout.scaleX = scale;
-          layout.scaleY = scale;
-        }
-
-        // Vertically center all non-background elements
-        const elemH = el.nativeHeight * layout.scaleY;
-        layout.y = Math.round((stripH - elemH) / 2);
-
-        // Horizontal positioning: ribbon flush left, logo next, then headline/char center, CTA right
-        const elemW = el.nativeWidth * layout.scaleX;
-        if (isRibbon) {
-          layout.x = 0;
-          layout.y = 0; // ribbon flush top-left corner
-        } else if (isLogo) {
-          // Place logo right after the ribbon
-          const ribbonLayout = results.find(r => {
-            const re = elements.find(e => e.id === r.elementId);
-            return re && r.visible && (re.label.toLowerCase().includes('ribbon') || re.label.toLowerCase().includes('badge') || re.label.toLowerCase().includes('new'));
-          });
-          const ribbonRight = ribbonLayout ? ribbonLayout.x + elements.find(e => e.id === ribbonLayout.elementId)!.nativeWidth * ribbonLayout.scaleX : 0;
-          layout.x = Math.round(ribbonRight + stripW * 0.01);
-        } else if (isCTA) {
-          // CTA right-aligned with small margin
-          layout.x = Math.round(stripW - elemW - stripW * 0.02);
-        }
-      }
-
-      // Position headline and character in the center zone
-      const logoLayout = results.find(r => {
-        const el = elements.find(e => e.id === r.elementId);
-        return el?.role === 'logo' && r.visible;
-      });
-      const ctaLayout = results.find(r => {
-        const el = elements.find(e => e.id === r.elementId);
-        return (el?.role === 'cta' || el?.label.toLowerCase().includes('cta')) && r.visible;
-      });
-      const logoRight = logoLayout ? logoLayout.x + elements.find(e => e.id === logoLayout.elementId)!.nativeWidth * logoLayout.scaleX : stripW * 0.15;
-      const ctaLeft = ctaLayout ? ctaLayout.x : stripW * 0.75;
-      const centerZoneStart = logoRight + stripW * 0.02;
-      const centerZoneEnd = ctaLeft - stripW * 0.02;
-      const centerZoneW = Math.max(stripW * 0.15, centerZoneEnd - centerZoneStart);
-
-      for (const layout of results) {
-        const el = elements.find(e => e.id === layout.elementId);
-        if (!el || !layout.visible || el.role === 'background') continue;
-        const ll = el.label.toLowerCase();
-        const isText = el.role === 'text';
-        const isChar = el.role === 'character';
-
-        if (isText) {
-          // Scale headline to fill center zone width (~80%) and fit strip height
-          const textTargetW = Math.max(20, centerZoneW * 0.75);
-          const textTargetH = stripH * 0.60;
-          const textScale = Math.max(0.01, Math.min(textTargetW / el.nativeWidth, textTargetH / el.nativeHeight));
-          layout.scaleX = textScale;
-          layout.scaleY = textScale;
-          const textW = el.nativeWidth * textScale;
-          const textH = el.nativeHeight * textScale;
-          layout.x = Math.round(centerZoneStart + (centerZoneW - textW) / 2);
-          layout.y = Math.round((stripH - textH) / 2);
-        } else if (isChar) {
-          // Character: bust/face closeup, positioned center-right in the center zone
-          const charTargetH = stripH * 0.85;
-          const charScale = charTargetH / el.nativeHeight;
-          layout.scaleX = charScale;
-          layout.scaleY = charScale;
-          const charW = el.nativeWidth * charScale;
-          const charH = el.nativeHeight * charScale;
-          // Place character in right portion of center zone
-          layout.x = Math.round(centerZoneEnd - charW - centerZoneW * 0.05);
-          layout.y = Math.round((stripH - charH) / 2);
-        }
       }
     }
 
@@ -1716,48 +1437,56 @@ Only deviate from the references when the aspect ratio absolutely forces it (e.g
       const lowerLabel = el.label.toLowerCase();
       console.log(`  [PP] "${el.label}" role=${el.role} pos=(${layout.x},${layout.y}) scale=${layout.scaleX.toFixed(3)}`);
 
-      // --- Post-processing: enforce critical constraints only ---
-
-      // Ribbon: always flush to (0,0)
-      const isRibbon = lowerLabel.includes('ribbon') || lowerLabel.includes('badge') || (lowerLabel.includes('new') && el.role === 'decoration');
-      if (isRibbon) {
-        layout.x = 0;
-        layout.y = 0;
+      // --- FIX 1: Coin position — pin to BOTTOM EDGE as decorative ground band ---
+      const isCoin = lowerLabel.includes('coin') || lowerLabel.includes('gold');
+      if (isCoin) {
+        const beforeY = layout.y;
+        const beforeScale = layout.scaleX;
+        // Coins should be a decorative ground band: ~15% canvas height, pinned to bottom
+        const targetCoinH = targetHeight * 0.15;
+        const coinScale = targetCoinH / el.nativeHeight;
+        layout.scaleX = coinScale;
+        layout.scaleY = coinScale;
+        // Pin to absolute bottom edge
+        layout.y = Math.round(targetHeight - targetCoinH);
+        // Center horizontally (or keep AI x if reasonable)
+        const coinW = el.nativeWidth * coinScale;
+        layout.x = Math.round(Math.max(0, Math.min(targetWidth - coinW, layout.x)));
+        console.log(`    → COIN FIX: y ${beforeY} → ${layout.y}, scale ${beforeScale.toFixed(3)} → ${coinScale.toFixed(3)}`);
+        continue; // skip other checks for coins
       }
 
-      // Logo: max 20% of canvas width (AI sometimes makes it huge)
-      const isLogo = el.role === 'logo';
-      if (isLogo) {
-        const maxLogoW = targetWidth * 0.20;
-        const logoW = el.nativeWidth * layout.scaleX;
-        if (logoW > maxLogoW) {
-          const shrink = maxLogoW / el.nativeWidth;
-          layout.scaleX = shrink;
-          layout.scaleY = shrink;
+      // --- Canvas bounds clamping: 95% of element must be visible ---
+      const elW = el.nativeWidth * layout.scaleX;
+      const elH = el.nativeHeight * layout.scaleY;
+      const margin = 0.05; // allow only 5% overflow
+      layout.x = Math.round(Math.max(-elW * margin, Math.min(targetWidth - elW * (1 - margin), layout.x)));
+      layout.y = Math.round(Math.max(-elH * margin, Math.min(targetHeight - elH * (1 - margin), layout.y)));
+
+      // --- FIX 3: Max element size enforcement (non-background): 50% of canvas ---
+      if (el.role !== 'background') {
+        const maxW = targetWidth * 0.50;
+        const maxH = targetHeight * 0.50;
+        const curW = el.nativeWidth * layout.scaleX;
+        const curH = el.nativeHeight * layout.scaleY;
+        if (curW > maxW || curH > maxH) {
+          const shrink = Math.min(maxW / el.nativeWidth, maxH / el.nativeHeight);
+          if (shrink < layout.scaleX) {
+            layout.scaleX = shrink;
+            layout.scaleY = shrink;
+          }
         }
       }
 
-      // CTA: ensure 3% margin from canvas edges
+      // --- FIX 4: CTA margin enforcement: at least 5% from all edges ---
       const isCTA = el.role === 'cta' || lowerLabel.includes('cta') || lowerLabel.includes('button');
-      if (isCTA && !isStripBanner) {
+      if (isCTA) {
+        const mX = targetWidth * 0.05;
+        const mY = targetHeight * 0.05;
         const ctaW = el.nativeWidth * layout.scaleX;
         const ctaH = el.nativeHeight * layout.scaleY;
-        const minM = Math.max(4, targetWidth * 0.03);
-        if (layout.y + ctaH > targetHeight - minM) layout.y = Math.round(targetHeight - ctaH - minM);
-        if (layout.x < minM) layout.x = Math.round(minM);
-        if (layout.x + ctaW > targetWidth - minM) layout.x = Math.round(targetWidth - ctaW - minM);
-      }
-
-      // Prevent elements from being completely off-canvas (except background and coins)
-      const isCoin = lowerLabel.includes('coin') || lowerLabel.includes('gold');
-      if (!isCoin && el.role !== 'background') {
-        const elW = el.nativeWidth * layout.scaleX;
-        const elH = el.nativeHeight * layout.scaleY;
-        // At least 50% of element must be visible
-        if (layout.x + elW < elW * 0.5) layout.x = 0;
-        if (layout.y + elH < elH * 0.5) layout.y = 0;
-        if (layout.x > targetWidth - elW * 0.5) layout.x = Math.round(targetWidth - elW);
-        if (layout.y > targetHeight - elH * 0.5) layout.y = Math.round(targetHeight - elH);
+        layout.x = Math.round(Math.max(mX, Math.min(targetWidth - ctaW - mX, layout.x)));
+        layout.y = Math.round(Math.max(mY, Math.min(targetHeight - ctaH - mY, layout.y)));
       }
     }
 
@@ -1778,44 +1507,29 @@ Only deviate from the references when the aspect ratio absolutely forces it (e.g
       const charBox = getBox(charLayout, charEl);
       const bubbleBox = getBox(layout, el);
 
-      // Face = top 35% of character
-      const faceBottom = charBox.y + charBox.h * 0.35;
+      // Face = top 40% of character (generous zone to prevent any overlap)
+      const faceBottom = charBox.y + charBox.h * 0.4;
       const faceTop = charBox.y;
 
-      // Check if bubble overlaps the face zone at all (generous detection)
-      const safeMargin = Math.max(10, targetHeight * 0.02);
-      const hOverlap = Math.min(bubbleBox.right, charBox.right + safeMargin) - Math.max(bubbleBox.x, charBox.x - safeMargin);
-      const vOverlap = Math.min(bubbleBox.bottom, faceBottom + safeMargin) - Math.max(bubbleBox.y, faceTop - safeMargin);
+      // Check ANY overlap between bubble and face zone (with generous margin)
+      const margin = Math.max(15, targetHeight * 0.03);
+      const overlapH = Math.min(bubbleBox.right, charBox.right + margin) - Math.max(bubbleBox.x, charBox.x - margin);
+      const overlapV = Math.min(bubbleBox.bottom, faceBottom + margin) - Math.max(bubbleBox.y, faceTop - margin);
 
-      if (hOverlap > 0 && vOverlap > 0) {
-        const gap = Math.max(8, targetHeight * 0.03);
-        // Strategy 1: Place bubble ABOVE character head
-        const aboveY = Math.round(faceTop - bubbleBox.h - gap);
-        if (aboveY >= 0) {
-          layout.y = aboveY;
-          // Keep x near character but not overlapping face
-          layout.x = Math.round(Math.max(0, Math.min(charBox.x, targetWidth - bubbleBox.w)));
-        } else {
-          // Strategy 2: Place bubble to the RIGHT of character
-          const rightX = Math.round(charBox.right + gap);
-          if (rightX + bubbleBox.w <= targetWidth) {
-            layout.x = rightX;
-            layout.y = Math.round(Math.max(0, charBox.y));
-          } else {
-            // Strategy 3: Place bubble to the LEFT of character
-            const leftX = Math.round(charBox.x - bubbleBox.w - gap);
-            if (leftX >= 0) {
-              layout.x = leftX;
-              layout.y = Math.round(Math.max(0, charBox.y));
-            } else {
-              // Strategy 4: Above with y=0, shifted horizontally
-              layout.y = 0;
-              layout.x = Math.round(Math.min(charBox.x - bubbleBox.w * 0.5, targetWidth - bubbleBox.w));
-              layout.x = Math.max(0, layout.x);
-            }
+      if (overlapH > 0 && overlapV > 0) {
+        // Push bubble above the character's head with clear gap
+        const gap = Math.max(5, targetHeight * 0.02);
+        layout.y = Math.round(faceTop - bubbleBox.h - gap);
+        // If that goes above canvas, try to the right of character instead
+        if (layout.y < 0) {
+          layout.y = Math.round(faceTop);
+          layout.x = Math.round(charBox.right + gap);
+          // If that goes off canvas right, just keep above with y=0
+          if (layout.x + bubbleBox.w > targetWidth) {
+            layout.x = Math.round(charBox.x);
+            layout.y = 0;
           }
         }
-        console.log(`    → BUBBLE FIX: moved to (${layout.x},${layout.y}) away from face zone`);
       }
     }
 
@@ -1842,36 +1556,17 @@ Only deviate from the references when the aspect ratio absolutely forces it (e.g
       const overlapRight = Math.min(charBox.right, slotBox.right);
       const hOverlap = Math.max(0, overlapRight - overlapLeft);
 
-      // If character overlaps slot by more than 10% of slot width, push character beside it
-      if (hOverlap > slotBox.w * 0.10) {
-        const isPortraitCanvas = targetHeight > targetWidth;
-        const charCenter = charBox.x + charBox.w / 2;
-        const slotCenter = slotBox.x + slotBox.w / 2;
-
-        // Decide which side: put character to the right if it's mostly right of slot center
-        if (charCenter >= slotCenter || isPortraitCanvas) {
-          // Character goes RIGHT of slot
-          const newX = Math.round(slotBox.right + targetWidth * 0.01);
-          if (newX + charBox.w <= targetWidth * 1.02) {
-            layout.x = newX;
-          } else {
-            // Doesn't fit right — scale character down to fit
-            const available = targetWidth - slotBox.right - targetWidth * 0.02;
-            if (available > charBox.w * 0.4) {
-              layout.x = Math.round(slotBox.right + targetWidth * 0.01);
-              const newScale = available / el.nativeWidth;
-              layout.scaleX = Math.min(layout.scaleX, newScale);
-              layout.scaleY = layout.scaleX;
-            } else {
-              // Last resort: put character LEFT of slot
-              layout.x = Math.round(Math.max(0, slotBox.x - charBox.w - targetWidth * 0.01));
-            }
-          }
+      // If character overlaps slot by more than 15% of slot width, push character to the side
+      if (hOverlap > slotBox.w * 0.15) {
+        // Move character to the right of the slot
+        const newX = Math.round(slotBox.right - charBox.w * 0.1); // allow 10% body overlap
+        if (newX + charBox.w <= targetWidth * 1.05) {
+          layout.x = newX;
         } else {
-          // Character goes LEFT of slot
-          layout.x = Math.round(Math.max(0, slotBox.x - charBox.w - targetWidth * 0.01));
+          // Try left side
+          layout.x = Math.round(slotBox.x - charBox.w * 0.9);
+          if (layout.x < 0) layout.x = 0;
         }
-        console.log(`    → CHAR-SLOT FIX: char moved to x=${layout.x} (slot at ${Math.round(slotBox.x)}-${Math.round(slotBox.right)})`);
       }
     }
 

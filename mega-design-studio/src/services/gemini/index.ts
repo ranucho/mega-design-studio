@@ -59,7 +59,6 @@ export {
   composeBannerAtSize,
   resizeImageExact,
   generateBannerLayout,
-  generateTemplateLayout,
   reskinBanner,
   sparkleBanner,
   DEFAULT_FINE_TUNE,
