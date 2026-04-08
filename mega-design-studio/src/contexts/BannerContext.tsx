@@ -38,6 +38,7 @@ interface BannerContextType {
   // Compositions
   addComposition: (comp: BannerComposition) => void;
   updateComposition: (id: string, updates: Partial<BannerComposition>) => void;
+  removeComposition: (id: string) => void;
   updateLayer: (compId: string, layerId: string, updates: Partial<BannerLayer>) => void;
   activeCompositionId: string | null;
   setActiveCompositionId: (id: string | null) => void;
@@ -175,16 +176,12 @@ const scaleLayoutFromTemplate = (
         };
       }
 
-      // Scale position and size
+      // Scale position and size — preserve the EXACT relative position from the template.
+      // If the character overflows the canvas in the template, it should overflow in the resize too.
       let rawX = l.x * uniformScale + offsetX;
       let rawY = l.y * uniformScale + offsetY;
-      const elW = el.nativeWidth * l.scaleX * uniformScale;
-      const elH = el.nativeHeight * l.scaleY * uniformScale;
-
-      // Clamp: ensure the element stays within canvas bounds
-      // Don't let it start before 0 or end after canvas edge
-      rawX = Math.max(0, Math.min(rawX, targetW - elW));
-      rawY = Math.max(0, Math.min(rawY, targetH - elH));
+      // NO CLAMPING — preserve the original composition including elements that extend
+      // beyond the canvas edges (e.g. character partially off-screen, coins overflowing bottom)
 
       return {
         elementId: el.id,
@@ -577,12 +574,11 @@ export const BannerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const TH = template.height;
 
       if (preset.key === 'square-480') {
-        // Pure proportional resize
+        // Pure proportional resize — no modifications
         const scaled = scaleLayoutFromTemplate(template, W, H, elements);
         if (scaled.length === 0) return null;
         const comp = buildComposition(preset, scaled);
         enforceTemplateLayerOrder(comp, template);
-        // Switch to 2-line headline variant
         switchToVariant(comp, 'multiline', elements);
         return comp;
       }
@@ -669,27 +665,14 @@ export const BannerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               item.y += Math.round(H * 0.08);
             }
 
-            // CTA — move up to overlap bottom 30% of slot
+            // CTA — position at same bottom margin as other square banners (~2% from bottom)
+            // This naturally creates overlap with the slot above
             if (el.role === 'cta' || el.label.toLowerCase().includes('cta')) {
-              // Find the slot to calculate overlap position
-              const slotItem = scaled.find(s => {
-                const se = elements.find(e => e.id === s.elementId);
-                return se && (se.label.toLowerCase().includes('slot') || se.label.toLowerCase().includes('reel'));
-              });
-              if (slotItem) {
-                const slotEl = elements.find(e => e.id === slotItem.elementId);
-                if (slotEl) {
-                  const slotBottom = slotItem.y + slotEl.nativeHeight * slotItem.scaleY;
-                  const slotH = slotEl.nativeHeight * slotItem.scaleY;
-                  // Position CTA so it overlaps bottom 30% of slot
-                  const ctaH = el.nativeHeight * item.scaleX;
-                  item.y = Math.round(slotBottom - slotH * 0.30);
-                  // Ensure CTA doesn't go below canvas
-                  if (item.y + ctaH > H - H * 0.03) {
-                    item.y = Math.round(H - ctaH - H * 0.03);
-                  }
-                }
-              }
+              const ctaH = el.nativeHeight * item.scaleY;
+              const ctaW = el.nativeWidth * item.scaleX;
+              item.y = Math.round(H - ctaH - H * 0.02);
+              // Center horizontally
+              item.x = Math.round((W - ctaW) / 2);
             }
           }
         }
@@ -928,6 +911,15 @@ export const BannerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
   }, []);
 
+  const removeComposition = useCallback((id: string) => {
+    setProject(prev => {
+      if (!prev) return null;
+      const filtered = prev.compositions.filter(c => c.id !== id);
+      return { ...prev, compositions: filtered };
+    });
+    setActiveCompositionId(prev => prev === id ? null : prev);
+  }, []);
+
   const updateLayer = useCallback((compId: string, layerId: string, updates: Partial<BannerLayer>) => {
     setProject(prev => {
       if (!prev) return null;
@@ -960,6 +952,7 @@ export const BannerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setSelectedPresets,
       addComposition,
       updateComposition,
+      removeComposition,
       updateLayer,
       activeCompositionId,
       setActiveCompositionId,

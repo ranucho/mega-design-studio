@@ -82,7 +82,7 @@ export const BannerPresets: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 min-h-0 overflow-auto p-6">
         <div className="max-w-4xl mx-auto flex flex-col gap-6">
 
           <div className="text-center">
@@ -188,12 +188,14 @@ export const BannerPresets: React.FC = () => {
                       <button
                         key={preset.key}
                         onClick={() => togglePreset(preset.key)}
-                        className={`group relative flex items-center gap-2 px-3 py-2 rounded-lg text-xs border transition-all ${
-                          hasComposition
-                            ? 'bg-emerald-600/15 text-emerald-300 border-emerald-600/40 shadow-sm shadow-emerald-600/10'
-                            : isSelected
-                              ? 'bg-cyan-600/15 text-cyan-300 border-cyan-600/40 shadow-sm shadow-cyan-600/10'
-                              : 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:border-zinc-600 hover:text-zinc-300'
+                        className={`group relative flex items-center gap-2 px-3 py-2 rounded-lg text-xs border-2 transition-all ${
+                          hasComposition && isSelected
+                            ? 'bg-emerald-600/20 text-emerald-200 border-emerald-400 shadow-md shadow-emerald-500/30 ring-1 ring-emerald-400/50'
+                            : hasComposition
+                              ? 'bg-emerald-600/10 text-emerald-400 border-emerald-700/40 hover:border-emerald-500/60'
+                              : isSelected
+                                ? 'bg-cyan-600/15 text-cyan-300 border-cyan-500 shadow-md shadow-cyan-500/20'
+                                : 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:border-zinc-600 hover:text-zinc-300'
                         }`}
                       >
                         {/* Generated badge */}

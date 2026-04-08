@@ -179,7 +179,7 @@ const StripView: React.FC<BannerCompositionGridProps> = ({ onSelect, selectedId 
 // ── Gallery mode (full screen, zoomable, like Adobe Bridge) ──
 
 const GalleryView: React.FC<BannerCompositionGridProps> = ({ onSelect }) => {
-  const { project } = useBanner();
+  const { project, removeComposition } = useBanner();
   const [zoom, setZoom] = useState(50); // 10-100 slider value → controls thumb size
 
   if (!project) return null;
@@ -284,6 +284,14 @@ const GalleryView: React.FC<BannerCompositionGridProps> = ({ onSelect }) => {
                         Edit
                       </span>
                     </div>
+                    {/* Delete button */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); removeComposition(comp.id); }}
+                      className="absolute top-1 right-1 w-6 h-6 rounded-full bg-red-600/80 hover:bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                      title="Remove this size"
+                    >
+                      <i className="fa-solid fa-trash text-[9px]" />
+                    </button>
                   </div>
 
                   {/* Info bar */}
