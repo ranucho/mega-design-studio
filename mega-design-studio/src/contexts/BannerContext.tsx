@@ -554,12 +554,212 @@ export const BannerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       };
     };
 
-    // --- Phase 1: Deterministic scaling for SAME ORIENTATION templates ---
-    // When template and target are both landscape (or both portrait), pure proportional
-    // scaling preserves the design perfectly. No AI needed.
+    // --- Custom layout: group-specific rules from designer instructions ---
+
+    /**
+     * SQUARE GROUP: 480x480, 336x280, 300x250
+     * All derive from the user-edited 1080x1080 (fb-square).
+     *
+     * 480x480: exact proportional resize of 1080x1080.
+     * 336x280: resize 1080x1080 → 280x280, then extend width to 336 (extra bg on sides).
+     *          Character nudged right to overlap slot less. Ribbon flush left, logo flush right.
+     * 300x250: like 336x280 but no character, smaller logo, tighter vertical spacing,
+     *          CTA overlaps bottom 30% of slot, slot shifted down.
+     * All square: use 2-line headline variant when available.
+     */
+    const buildSquareLayout = (
+      template: BannerComposition,
+      preset: { name: string; key: string; width: number; height: number },
+    ): BannerComposition | null => {
+      const W = preset.width;
+      const H = preset.height;
+      const TW = template.width;
+      const TH = template.height;
+
+      if (preset.key === 'square-480') {
+        // Pure proportional resize
+        const scaled = scaleLayoutFromTemplate(template, W, H, elements);
+        if (scaled.length === 0) return null;
+        const comp = buildComposition(preset, scaled);
+        enforceTemplateLayerOrder(comp, template);
+        // Switch to 2-line headline variant
+        switchToVariant(comp, 'multiline', elements);
+        return comp;
+      }
+
+      if (preset.key === 'gdn-large-rect' || preset.key === 'gdn-medium-rect') {
+        // Step 1: Scale template to a square that fits the height
+        const squareSize = H; // 280 for 336x280, 250 for 300x250
+        const scaled = scaleLayoutFromTemplate(template, squareSize, squareSize, elements);
+        if (scaled.length === 0) return null;
+
+        // Step 2: Offset all elements to center in the wider canvas
+        const extraW = W - squareSize;
+        const offsetX = Math.round(extraW / 2);
+        for (const item of scaled) {
+          const el = elements.find(e => e.id === item.elementId);
+          if (!el) continue;
+          if (el.role === 'background') {
+            // Background: cover the full target canvas
+            const coverScale = Math.max(W / el.nativeWidth, H / el.nativeHeight);
+            item.x = Math.round((W - el.nativeWidth * coverScale) / 2);
+            item.y = Math.round((H - el.nativeHeight * coverScale) / 2);
+            item.scaleX = coverScale;
+            item.scaleY = coverScale;
+          } else {
+            item.x += offsetX;
+          }
+        }
+
+        // Step 3: Ribbon flush to left (x=0), logo flush to right
+        for (const item of scaled) {
+          const el = elements.find(e => e.id === item.elementId);
+          if (!el) continue;
+          const n = el.label.toLowerCase();
+          if (n.includes('badge') || (n.includes('new') && el.role === 'decoration')) {
+            item.x = 0;
+            item.y = 0;
+          }
+          if (el.role === 'logo') {
+            const logoW = el.nativeWidth * item.scaleX;
+            item.x = Math.round(W - logoW - W * 0.02);
+          }
+        }
+
+        // Step 4: 336x280 — nudge character right to overlap slot less
+        if (preset.key === 'gdn-large-rect') {
+          for (const item of scaled) {
+            const el = elements.find(e => e.id === item.elementId);
+            if (el?.role === 'character') {
+              item.x += Math.round(W * 0.05); // nudge right ~5%
+              // Clamp to canvas
+              const elW = el.nativeWidth * item.scaleX;
+              if (item.x + elW > W) item.x = Math.round(W - elW);
+            }
+          }
+        }
+
+        // Step 5: 300x250 — hide character, smaller logo, tighter spacing, CTA overlaps slot
+        if (preset.key === 'gdn-medium-rect') {
+          for (const item of scaled) {
+            const el = elements.find(e => e.id === item.elementId);
+            if (!el) continue;
+
+            // Hide character
+            if (el.role === 'character') {
+              item.visible = false;
+            }
+
+            // Smaller logo (shrink by 30%)
+            if (el.role === 'logo') {
+              item.scaleX *= 0.7;
+              item.scaleY *= 0.7;
+              const logoW = el.nativeWidth * item.scaleX;
+              item.x = Math.round(W - logoW - W * 0.02);
+            }
+
+            // Tighter top spacing — move headline closer to top
+            if (el.role === 'text' || el.label.toLowerCase().includes('headline')) {
+              item.y = Math.max(0, item.y - Math.round(H * 0.03));
+            }
+
+            // Slot machine — shift down slightly
+            const isSlot = el.label.toLowerCase().includes('slot') || el.label.toLowerCase().includes('reel') || el.label.toLowerCase().includes('tray');
+            if (isSlot) {
+              item.y += Math.round(H * 0.08);
+            }
+
+            // CTA — move up to overlap bottom 30% of slot
+            if (el.role === 'cta' || el.label.toLowerCase().includes('cta')) {
+              // Find the slot to calculate overlap position
+              const slotItem = scaled.find(s => {
+                const se = elements.find(e => e.id === s.elementId);
+                return se && (se.label.toLowerCase().includes('slot') || se.label.toLowerCase().includes('reel'));
+              });
+              if (slotItem) {
+                const slotEl = elements.find(e => e.id === slotItem.elementId);
+                if (slotEl) {
+                  const slotBottom = slotItem.y + slotEl.nativeHeight * slotItem.scaleY;
+                  const slotH = slotEl.nativeHeight * slotItem.scaleY;
+                  // Position CTA so it overlaps bottom 30% of slot
+                  const ctaH = el.nativeHeight * item.scaleX;
+                  item.y = Math.round(slotBottom - slotH * 0.30);
+                  // Ensure CTA doesn't go below canvas
+                  if (item.y + ctaH > H - H * 0.03) {
+                    item.y = Math.round(H - ctaH - H * 0.03);
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        const comp = buildComposition(preset, scaled);
+        enforceTemplateLayerOrder(comp, template);
+        // Use 2-line headline for all square banners
+        switchToVariant(comp, 'multiline', elements);
+        return comp;
+      }
+
+      return null;
+    };
+
+    /** Switch visible variant: hide current, show the variant of given kind */
+    const switchToVariant = (comp: BannerComposition, variantKind: string, els: ExtractedElement[]) => {
+      // Find all variant groups
+      const groups = new Map<string, { parent: BannerLayer | null; variants: BannerLayer[] }>();
+      for (const layer of comp.layers) {
+        const el = els.find(e => e.label === layer.name && (e.role === layer.role || e.dataUrl === layer.src))
+          || els.find(e => e.label === layer.name);
+        if (!el) continue;
+        const groupId = el.variantOfId || el.id;
+        if (!groups.has(groupId)) groups.set(groupId, { parent: null, variants: [] });
+        const g = groups.get(groupId)!;
+        if (el.variantOfId) g.variants.push(layer);
+        else g.parent = layer;
+      }
+
+      for (const [, group] of groups) {
+        if (!group.parent || group.variants.length === 0) continue;
+        const target = group.variants.find(v => {
+          const el = els.find(e => e.label === v.name);
+          return el?.variantKind === variantKind;
+        });
+        if (target) {
+          // Hide parent, show variant (at parent's position/size)
+          const parentVisible = group.parent.visible;
+          if (parentVisible !== false) {
+            group.parent.visible = false;
+            target.visible = true;
+            // Match position to parent
+            target.x = group.parent.x;
+            target.y = group.parent.y;
+            // Scale variant to match parent's visual footprint
+            const parentW = group.parent.nativeWidth * group.parent.scaleX;
+            const parentH = group.parent.nativeHeight * group.parent.scaleY;
+            target.scaleX = parentW / target.nativeWidth;
+            target.scaleY = parentH / target.nativeHeight;
+          }
+        }
+      }
+    };
+
+    // --- Phase 1: Custom group layouts, then deterministic scaling, then AI ---
     const needsAI: typeof presetsToGenerate = [];
 
     for (const preset of presetsToGenerate) {
+      // Try custom square group layout first
+      const squareTemplate = existingComps.find(c => c.presetKey === 'fb-square' && c.status === 'edited')
+        || [...existingComps, ...newCompositions].find(c => c.presetKey === 'fb-square');
+      if (squareTemplate && ['square-480', 'gdn-large-rect', 'gdn-medium-rect'].includes(preset.key)) {
+        const comp = buildSquareLayout(squareTemplate, preset);
+        if (comp) {
+          newCompositions.push(comp);
+          continue;
+        }
+      }
+
+      // Fall through to existing deterministic/AI path
       const pseudoTarget: BannerComposition = {
         id: '__pending__', name: preset.name, presetKey: preset.key,
         width: preset.width, height: preset.height, layers: [],
