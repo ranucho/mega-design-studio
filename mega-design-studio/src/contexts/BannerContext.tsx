@@ -699,6 +699,75 @@ export const BannerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return null;
     };
 
+    /**
+     * PORTRAIT GROUP: 720x1280, 768x1024, 320x480, 300x600
+     * All derive from user-edited 1080x1920 (ig-stories / fb-stories).
+     *
+     * 720x1280: exact proportional resize of 1080x1920.
+     * 768x1024: character -7%, title -15%, slot -3%, CTA -1%.
+     * 320x480: TBD (awaiting instructions)
+     * 300x600: TBD (awaiting instructions)
+     */
+    const buildPortraitLayout = (
+      template: BannerComposition,
+      preset: { name: string; key: string; width: number; height: number },
+    ): BannerComposition | null => {
+      const W = preset.width;
+      const H = preset.height;
+
+      if (preset.key === 'portrait-hd-720') {
+        // Pure proportional resize
+        const scaled = scaleLayoutFromTemplate(template, W, H, elements);
+        if (scaled.length === 0) return null;
+        const comp = buildComposition(preset, scaled);
+        enforceTemplateLayerOrder(comp, template);
+        return comp;
+      }
+
+      if (preset.key === 'ipad-portrait') {
+        // Base: proportional resize from 1080x1920
+        const scaled = scaleLayoutFromTemplate(template, W, H, elements);
+        if (scaled.length === 0) return null;
+
+        for (const item of scaled) {
+          const el = elements.find(e => e.id === item.elementId);
+          if (!el || el.role === 'background') continue;
+
+          // Character: 7% smaller
+          if (el.role === 'character') {
+            item.scaleX *= 0.93;
+            item.scaleY *= 0.93;
+          }
+
+          // Title/headline: 15% smaller
+          if (el.role === 'text' || el.label.toLowerCase().includes('headline')) {
+            item.scaleX *= 0.85;
+            item.scaleY *= 0.85;
+          }
+
+          // Slot machine: 3% smaller
+          const isSlot = el.label.toLowerCase().includes('slot') || el.label.toLowerCase().includes('reel') || el.label.toLowerCase().includes('tray');
+          if (isSlot) {
+            item.scaleX *= 0.97;
+            item.scaleY *= 0.97;
+          }
+
+          // CTA: 1% smaller
+          if (el.role === 'cta' || el.label.toLowerCase().includes('cta')) {
+            item.scaleX *= 0.99;
+            item.scaleY *= 0.99;
+          }
+        }
+
+        const comp = buildComposition(preset, scaled);
+        enforceTemplateLayerOrder(comp, template);
+        return comp;
+      }
+
+      // 320x480 and 300x600: fall through to default path for now
+      return null;
+    };
+
     /** Switch visible variant: hide current, show the variant of given kind */
     const switchToVariant = (comp: BannerComposition, variantKind: string, els: ExtractedElement[]) => {
       // Find all variant groups
@@ -748,6 +817,17 @@ export const BannerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         || [...existingComps, ...newCompositions].find(c => c.presetKey === 'fb-square');
       if (squareTemplate && ['square-480', 'gdn-large-rect', 'gdn-medium-rect'].includes(preset.key)) {
         const comp = buildSquareLayout(squareTemplate, preset);
+        if (comp) {
+          newCompositions.push(comp);
+          continue;
+        }
+      }
+
+      // Try custom portrait group layout
+      const portraitTemplate = existingComps.find(c => (c.presetKey === 'ig-stories' || c.presetKey === 'fb-stories') && c.status === 'edited')
+        || [...existingComps, ...newCompositions].find(c => c.presetKey === 'ig-stories' || c.presetKey === 'fb-stories');
+      if (portraitTemplate && ['portrait-hd-720', 'ipad-portrait', 'mobile-portrait-320', 'gdn-half-page'].includes(preset.key)) {
+        const comp = buildPortraitLayout(portraitTemplate, preset);
         if (comp) {
           newCompositions.push(comp);
           continue;
