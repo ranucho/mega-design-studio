@@ -20,7 +20,7 @@ import { BannersTab } from '@/components/banners/BannersTab';
 
 const AppContent: React.FC = () => {
   const { activeTab, setActiveTab } = useApp();
-  const [showParticles, setShowParticles] = useState(true);
+  const [showParticles, setShowParticles] = useState(false);
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [keyConfigured, setKeyConfigured] = useState(hasApiKey());

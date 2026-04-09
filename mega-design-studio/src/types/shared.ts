@@ -88,6 +88,7 @@ export interface SlotLayout {
   layoutGutterVertical: number;
   symbolScale: number;
   hideReelsBg: boolean;
+  useLongTiles: boolean;
 }
 
 export interface ReelGridAnalysis {
@@ -127,6 +128,7 @@ export interface SymbolGeneratorState {
 
   // Layout
   hideReelsBg?: boolean;
+  useLongTiles?: boolean;
   gridRows: number;
   gridCols: number;
   gridState: string[][];

@@ -139,6 +139,7 @@ export const SymbolGenerator: React.FC<{ isVisible?: boolean }> = ({ isVisible =
     reelsFrame,
     reelsFrameCropCoordinates,
     hideReelsBg,
+    useLongTiles,
     symbols,
     mergedFrames,
     gridRows,
@@ -158,7 +159,6 @@ export const SymbolGenerator: React.FC<{ isVisible?: boolean }> = ({ isVisible =
     animationPrompts,
     animationVideoCount,
     generatedVideos,
-    isGeneratingVideo,
     prompt,
     isProcessing,
     activeSubTab,
@@ -205,13 +205,46 @@ export const SymbolGenerator: React.FC<{ isVisible?: boolean }> = ({ isVisible =
     });
   }, [setSymbolGenState]);
 
+  /** Update a specific frame by ID (safe across async operations — won't drift if active frame changes) */
+  const updateFrameById = useCallback((frameId: string, updates: Partial<SourceFrame>) => {
+    setSymbolGenState(prev => {
+      const frames = prev.sourceFrames ?? [];
+      const isActive = (prev.activeSourceFrameId ?? frames[0]?.id) === frameId;
+      // Mirror to top-level only if this is the active frame
+      const topLevel: Record<string, unknown> = {};
+      if (isActive) {
+        if ('masterImage' in updates)               topLevel.masterImage = updates.masterImage ?? null;
+        if ('reskinResult' in updates)              topLevel.reskinResult = updates.reskinResult ?? null;
+        if ('reelsFrame' in updates)                topLevel.reelsFrame = updates.reelsFrame ?? null;
+        if ('reelsFrameCropCoordinates' in updates) topLevel.reelsFrameCropCoordinates = updates.reelsFrameCropCoordinates ?? null;
+        if ('masterPrompt' in updates)              topLevel.masterPrompt = updates.masterPrompt ?? '';
+        if ('isProcessingMaster' in updates)        topLevel.isProcessingMaster = updates.isProcessingMaster ?? false;
+        if ('activeMasterView' in updates)          topLevel.activeMasterView = updates.activeMasterView ?? 'source';
+      }
+      return {
+        ...prev,
+        ...topLevel,
+        sourceFrames: frames.map(f => f.id === frameId ? { ...f, ...updates } : f),
+      };
+    });
+  }, [setSymbolGenState]);
+
   const updateActiveLayout = useCallback((updates: Partial<SlotLayout>) => {
     setSymbolGenState(prev => {
       const layouts = prev.layouts ?? [];
       if (layouts.length === 0) return prev;
       const layoutId = prev.activeLayoutId ?? layouts[0]?.id;
+      // Mirror only layout fields that exist on top-level state (exclude sourceFrameId, id, name)
+      const topLevel: Record<string, unknown> = {};
+      const mirrorKeys = ['gridRows', 'gridCols', 'gridState', 'layoutOffsetX', 'layoutOffsetY',
+        'layoutWidth', 'layoutHeight', 'layoutGutterHorizontal', 'layoutGutterVertical',
+        'symbolScale', 'hideReelsBg', 'useLongTiles'] as const;
+      for (const k of mirrorKeys) {
+        if (k in updates) topLevel[k] = updates[k as keyof typeof updates];
+      }
       return {
         ...prev,
+        ...topLevel,
         layouts: layouts.map(l => l.id === layoutId ? { ...l, ...updates } : l),
       };
     });
@@ -301,6 +334,7 @@ export const SymbolGenerator: React.FC<{ isVisible?: boolean }> = ({ isVisible =
           layoutGutterVertical: prev.layoutGutterVertical,
           symbolScale: prev.symbolScale,
           hideReelsBg: prev.hideReelsBg ?? false,
+          useLongTiles: false,
         };
         updated = { ...updated, layouts: [layout0], activeLayoutId: layout0.id };
       }
@@ -325,6 +359,7 @@ export const SymbolGenerator: React.FC<{ isVisible?: boolean }> = ({ isVisible =
       layoutGutterVertical: activeLayout.layoutGutterVertical,
       symbolScale: activeLayout.symbolScale,
       hideReelsBg: activeLayout.hideReelsBg,
+      useLongTiles: activeLayout.useLongTiles ?? false,
     }));
   }, [activeLayout?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -616,32 +651,35 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
 
       if (isFrame) {
         const storedFrameCrop = { ...crop };
+        // Capture the frame ID now so async completion targets the correct frame
+        const targetFrameId = symbolGenState.activeSourceFrameId ?? (symbolGenState.sourceFrames ?? [])[0]?.id;
+        if (!targetFrameId) return;
         // Show processing state
-        updateActiveFrame({
+        updateFrameById(targetFrameId, {
           reelsFrameCropCoordinates: storedFrameCrop,
           isProcessingMaster: true,
         });
         // AI cleans the frame (removes symbols, keeps everything else)
-        // Then resizes output to match the raw crop dimensions exactly
         try {
           const cleaned = await extractReelsFrame(cropDataUrl);
           const result = cleaned || cropDataUrl;
-          updateActiveFrame({
+          updateFrameById(targetFrameId, {
             reelsFrame: result,
             isProcessingMaster: false,
           });
+          const frameName = (symbolGenState.sourceFrames ?? []).find(f => f.id === targetFrameId)?.name ?? 'Reels Frame';
           addAsset({
             id: `symgen-reelsframe-${Date.now()}`,
             url: result,
             type: 'background',
-            name: 'Reels Frame',
+            name: `${frameName} BG`,
           });
           toast('Reels frame extracted', { type: 'success' });
         } catch (frameErr) {
           console.error('Frame extraction failed', frameErr);
           toast('Frame extraction failed', { type: 'error' });
           // Fallback to raw crop
-          updateActiveFrame({
+          updateFrameById(targetFrameId, {
             reelsFrame: cropDataUrl,
             isProcessingMaster: false,
           });
@@ -685,6 +723,10 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
           type: isLongTile ? 'long_game_tile' : 'game_symbol',
           name: symbolName,
         });
+        // Auto-enable long tiles in active layout when a long tile is extracted
+        if (isLongTile) {
+          updateActiveLayout({ useLongTiles: true });
+        }
       }
     } catch (err) {
       console.error(err);
@@ -724,8 +766,8 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
       await new Promise<void>(r => { img.onload = () => r(); img.onerror = () => r(); });
       if (!img.width || !img.height) { setIsAutoExtracting(false); return; }
 
-      // Step 3: Create symbol entries and mark all as processing
-      const newSymbols: typeof symbols = detected.map((det, i) => ({
+      // Step 3: Create symbol entries from detected symbols
+      const newDetected: typeof symbols = detected.map((det, i) => ({
         id: `auto-${Date.now()}-${i}`,
         name: det.name,
         sourceUrl: sourceImg,
@@ -735,14 +777,28 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
         cropCoordinates: det.bbox,
         cropSourceView: activeMasterView as 'source' | 'reskinned',
         spanRows: det.isLongTile ? 3 : 1,
-        withFrame: det.role !== 'low', // All non-low symbols get withFrame (high, wild, scatter)
+        withFrame: det.role !== 'low',
         symbolRole: det.role,
       }));
 
-      // Replace existing symbols (keep reels frame state untouched)
-      updateState({ symbols: newSymbols, activeSubTab: 'extract' });
+      // Merge into existing symbol slots: match by name (case-insensitive),
+      // keep unmatched defaults as empty placeholders, append any extras
+      const mergedSymbols = symbols.map(existing => {
+        const match = newDetected.find(d => d.name.toLowerCase() === existing.name.toLowerCase());
+        if (match) return match;
+        // Keep existing placeholder but clear any stale data
+        return { ...existing, isProcessing: false };
+      });
+      // Add detected symbols that didn't match any existing slot
+      const existingSlotNames = new Set(symbols.map(s => s.name.toLowerCase()));
+      const extras = newDetected.filter(d => !existingSlotNames.has(d.name.toLowerCase()));
+      const allSymbols = [...mergedSymbols, ...extras];
 
-      // Step 4: Pre-crop all symbols (canvas ops are instant), then AI-isolate in parallel batches of 4
+      updateState({ symbols: allSymbols, activeSubTab: 'extract' });
+      const newSymbols = newDetected; // reference for crop loop below
+
+      // Step 4: Pre-crop all symbols (canvas ops are instant), show raw crops immediately,
+      // then AI-isolate in parallel batches of 4
       const cropData: { det: typeof detected[0]; sym: typeof newSymbols[0]; cropDataUrl: string }[] = [];
       for (let i = 0; i < detected.length; i++) {
         const det = detected[i];
@@ -768,6 +824,15 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
         sym.cropCoordinates = { x: bx, y: by, w: bw, h: bh };
         cropData.push({ det, sym, cropDataUrl: canvas.toDataURL('image/png') });
       }
+
+      // Show raw crops immediately so user sees what was detected
+      setSymbolGenState(prev => ({
+        ...prev,
+        symbols: prev.symbols.map(s => {
+          const crop = cropData.find(c => c.sym.id === s.id);
+          return crop ? { ...s, rawCropDataUrl: crop.cropDataUrl } : s;
+        }),
+      }));
 
       await parallelBatch(
         cropData,
@@ -798,9 +863,24 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
             type: isLongTile ? 'long_game_tile' : 'game_symbol',
             name: det.name,
           });
+          if (isLongTile) {
+            updateActiveLayout({ useLongTiles: true });
+          }
         },
         4, // batch size — 4 parallel AI calls
         300, // delay between batches
+        // onItemError: mark failed symbols as done so they don't stay stuck loading
+        (error, item) => {
+          console.warn(`Symbol isolation failed for "${item.det.name}":`, error.message);
+          setSymbolGenState(prev => ({
+            ...prev,
+            symbols: prev.symbols.map(s =>
+              s.id === item.sym.id
+                ? { ...s, isolatedUrl: item.cropDataUrl, isProcessing: false }
+                : s
+            ),
+          }));
+        },
       );
       toast('Symbols extracted', { type: 'success' });
     } catch (err) {
@@ -1049,6 +1129,8 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
   const autoReExtractBackground = async (reskinImageUrl: string) => {
     // We need the existing clean reelsFrame as reference
     const cleanRef = activeFrame?.reelsFrame ?? reelsFrame;
+    // Capture frame ID so async completion targets the correct frame
+    const targetFrameId = symbolGenState.activeSourceFrameId ?? (symbolGenState.sourceFrames ?? [])[0]?.id;
 
     setIsCleaningFrame(true);
 
@@ -1098,7 +1180,11 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
         }
       }
 
-      updateActiveFrame({ reelsFrame: result });
+      if (targetFrameId) {
+        updateFrameById(targetFrameId, { reelsFrame: result });
+      } else {
+        updateActiveFrame({ reelsFrame: result });
+      }
       addAsset({
         id: `symgen-reelsframe-${Date.now()}`,
         url: result,
@@ -1258,12 +1344,16 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
   const [isCleaningFrame, setIsCleaningFrame] = useState(false);
   const handleAICleanFrame = async () => {
     if (!reelsFrame || isCleaningFrame) return;
+    const targetFrameId = symbolGenState.activeSourceFrameId ?? (symbolGenState.sourceFrames ?? [])[0]?.id;
     setIsCleaningFrame(true);
     try {
-      // Detect aspect ratio from the frame image
       const cleaned = await extractReelsFrame(reelsFrame);
       if (cleaned) {
-        updateActiveFrame({ reelsFrame: cleaned });
+        if (targetFrameId) {
+          updateFrameById(targetFrameId, { reelsFrame: cleaned });
+        } else {
+          updateActiveFrame({ reelsFrame: cleaned });
+        }
         addAsset({
           id: `symgen-reelsframe-${Date.now()}`,
           url: cleaned,
@@ -1365,7 +1455,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
 
   const handleRandomFill = () => {
     const regularIds = symbols.filter(s => s.isolatedUrl && (s.spanRows || 1) === 1).map(s => s.id);
-    const longTileIds = symbols.filter(s => s.isolatedUrl && (s.spanRows || 1) >= 3).map(s => s.id);
+    const longTileIds = (useLongTiles ?? false) ? symbols.filter(s => s.isolatedUrl && (s.spanRows || 1) >= 3).map(s => s.id) : [];
     if (regularIds.length === 0) { toast('Extract symbols first', { type: 'error' }); return; }
     updateActiveLayout({ gridState: buildGridWithLongTiles(regularIds, longTileIds), hideReelsBg: false });
   };
@@ -1374,7 +1464,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
     const wild = symbols.find(s => s.name === 'Wild' && (s.spanRows || 1) === 1);
     if (!wild || !wild.isolatedUrl) { toast("Extract 'Wild' symbol first", { type: 'error' }); return; }
     const others = symbols.filter(s => s.isolatedUrl && s.id !== wild.id && (s.spanRows || 1) === 1).map(s => s.id);
-    const longTileIds = symbols.filter(s => s.isolatedUrl && (s.spanRows || 1) >= 3).map(s => s.id);
+    const longTileIds = (useLongTiles ?? false) ? symbols.filter(s => s.isolatedUrl && (s.spanRows || 1) >= 3).map(s => s.id) : [];
     if (others.length === 0) { toast('Extract other symbols first', { type: 'error' }); return; }
 
     const vCoords = [
@@ -1839,6 +1929,8 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
 
   // Video aspect ratio selector state
   const [videoAspectRatio, setVideoAspectRatio] = useState<'16:9' | '9:16'>('16:9');
+  // Track number of active generation jobs (allows parallel generation)
+  const [activeVideoJobs, setActiveVideoJobs] = useState(0);
 
   // Pad a frame image with green (#00FF00) to match the target video aspect ratio
   const padFrameForVideoRatio = (frameDataUrl: string, targetRatio: '16:9' | '9:16'): Promise<string> => {
@@ -1887,7 +1979,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
     });
   };
 
-  const handleGenerateVideo = async () => {
+  const handleGenerateVideo = () => {
     if (!selectedStartFrameId || !selectedEndFrameId) {
       toast('Select Start and End frames', { type: 'error' });
       return;
@@ -1901,32 +1993,41 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
     if (activePrompts.length === 0) { toast('Enter at least one animation prompt', { type: 'error' }); return; }
     const count = Math.min(4, Math.max(1, animationVideoCount || 1));
     const total = activePrompts.length * count;
+    const ratio = videoAspectRatio;
 
-    updateState({ isGeneratingVideo: true });
-    try {
-      // Pad frames once — shared across all generations
-      const paddedStart = await padFrameForVideoRatio(startFrame.dataUrl, videoAspectRatio);
-      const paddedEnd = await padFrameForVideoRatio(endFrame.dataUrl, videoAspectRatio);
+    // Fire-and-forget — user can immediately change start/end and generate more
+    setActiveVideoJobs(n => n + 1);
+    toast(`Generating ${total} video${total > 1 ? 's' : ''}...`, { type: 'info' });
 
-      const newVideos: { id: string; url: string; prompt?: string }[] = [];
-      for (const p of activePrompts) {
-        for (let i = 0; i < count; i++) {
-          const { url } = await generateAnimation(paddedStart, paddedEnd, p, videoAspectRatio, 'fast');
-          const vidId = crypto.randomUUID();
-          newVideos.push({ id: vidId, url, prompt: p });
-          addAsset({ id: vidId, url, type: 'game_symbol', name: `Slot Anim: ${p.slice(0, 20)}`, mediaType: 'video' });
+    (async () => {
+      try {
+        const paddedStart = await padFrameForVideoRatio(startFrame.dataUrl, ratio);
+        const paddedEnd = await padFrameForVideoRatio(endFrame.dataUrl, ratio);
+
+        for (const p of activePrompts) {
+          for (let i = 0; i < count; i++) {
+            try {
+              const { url } = await generateAnimation(paddedStart, paddedEnd, p, ratio, 'fast');
+              const vidId = crypto.randomUUID();
+              // Add each video as it completes
+              setSymbolGenState(prev => ({
+                ...prev,
+                generatedVideos: [{ id: vidId, url, prompt: p }, ...(prev.generatedVideos || [])],
+              }));
+              addAsset({ id: vidId, url, type: 'game_symbol', name: `Slot Anim: ${p.slice(0, 20)}`, mediaType: 'video' });
+            } catch (err) {
+              console.error('Single video generation failed:', err);
+            }
+          }
         }
+        toast(`Done generating ${total} video${total > 1 ? 's' : ''}`, { type: 'success', sound: true });
+      } catch (err) {
+        console.error(err);
+        toast('Animation generation failed.', { type: 'error' });
+      } finally {
+        setActiveVideoJobs(n => n - 1);
       }
-      updateState({
-        generatedVideos: [...newVideos, ...(generatedVideos || [])],
-        isGeneratingVideo: false,
-      });
-      toast(`Generated ${total} animation${total > 1 ? 's' : ''}`, { type: 'success', sound: true });
-    } catch (err) {
-      console.error(err);
-      toast('Animation generation failed.', { type: 'error' });
-      updateState({ isGeneratingVideo: false });
-    }
+    })();
   };
 
   // =========================================================================
@@ -2576,94 +2677,112 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
               );
               })}
 
-              {/* Reels Frame card — alongside symbols, same UX pattern */}
-              <div
-                className="bg-zinc-900 border border-blue-800/50 rounded-xl overflow-hidden flex flex-col group col-span-2"
-              >
-                <div
-                  className="bg-zinc-800 relative flex items-center justify-center border-b border-blue-700/30 w-full overflow-hidden p-2"
-                >
-                  {reelsFrame ? (
-                    <img src={reelsFrame} className="max-w-full h-auto object-contain" style={{ imageRendering: 'auto' }} />
-                  ) : (
-                    <div className="flex flex-col items-center gap-1">
-                      <i className="fas fa-border-all text-blue-500 text-lg" />
-                      <span className="text-zinc-400 text-xs font-bold">Reels Frame</span>
-                      <span className="text-blue-400 text-[9px] font-bold">NOT EXTRACTED</span>
-                    </div>
-                  )}
-                  <div className="absolute top-1 left-1">
-                    <div className="bg-blue-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded shadow w-fit">
-                      FRAME
-                    </div>
-                  </div>
-                  {/* Processing spinner — shown during frame extraction or AI clean */}
-                  {(isProcessingMaster || isCleaningFrame) ? (
-                    <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center gap-2">
-                      <i className="fas fa-spinner animate-spin text-blue-500 text-xl" />
-                      <span className="text-blue-300 text-[10px] font-bold uppercase">
-                        {isCleaningFrame ? 'AI Cleaning...' : 'Extracting Frame...'}
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
-                      <button
-                        onClick={handleStartFrameCrop}
-                        className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-[10px] font-bold uppercase shadow-lg transition-all transform hover:scale-105"
-                      >
-                        {reelsFrame ? 'Re-Crop' : 'Crop'}
-                      </button>
-                      {reelsFrame && (
-                        <>
-                          <button
-                            onClick={handleAICleanFrame}
-                            className="bg-white hover:bg-zinc-200 text-black px-3 py-1.5 rounded text-[10px] font-bold uppercase shadow-lg flex items-center gap-1 transition-all transform hover:scale-105"
-                          >
-                            <i className="fas fa-sync-alt" /> Retry
-                          </button>
-                          <button
-                            onClick={() => { setEditingSymbol({ id: '__reelsframe__', name: 'Reels Frame', isolatedUrl: reelsFrame } as any); setEditPrompt(''); setEditReference(null); }}
-                            className="bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded text-[10px] font-bold uppercase shadow-lg flex items-center gap-1 transition-all transform hover:scale-105"
-                          >
-                            <i className="fas fa-wand-magic-sparkles" /> Edit
-                          </button>
-                          <label className="bg-zinc-700 hover:bg-zinc-600 text-white px-3 py-1.5 rounded text-[10px] font-bold uppercase shadow-lg flex items-center gap-1 transition-all transform hover:scale-105 cursor-pointer">
-                            <i className="fas fa-upload" /> Upload
-                            <input type="file" accept="image/*" className="hidden" onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              const reader = new FileReader();
-                              reader.onload = () => {
-                                const url = reader.result as string;
-                                updateActiveFrame({ reelsFrame: url });
-                                addAsset({ id: `symgen-reelsframe-${Date.now()}`, url, type: 'background', name: 'Reels Frame (Uploaded)' });
-                              };
-                              reader.readAsDataURL(file);
-                            }} />
-                          </label>
-                          <button
-                            onClick={() => updateActiveFrame({ reelsFrame: null, reelsFrameCropCoordinates: null })}
-                            className="bg-red-600/80 hover:bg-red-500 text-white px-3 py-1.5 rounded text-[10px] font-bold uppercase shadow-lg flex items-center gap-1 transition-all transform hover:scale-105"
-                          >
-                            <i className="fas fa-trash" /> Clear
-                          </button>
-                        </>
+              {/* Reels Frame cards — one per source frame */}
+              {(symbolGenState.sourceFrames ?? []).map((srcFrame, frameIdx) => {
+                const frameBg = srcFrame.reelsFrame;
+                const isActiveFrame = srcFrame.id === (symbolGenState.activeSourceFrameId ?? (symbolGenState.sourceFrames ?? [])[0]?.id);
+                return (
+                  <div
+                    key={`bg-${srcFrame.id}`}
+                    className={`bg-zinc-900 border rounded-xl overflow-hidden flex flex-col group col-span-2 ${isActiveFrame ? 'border-blue-800/50' : 'border-zinc-700/50'}`}
+                  >
+                    <div
+                      className="bg-zinc-800 relative flex items-center justify-center border-b border-blue-700/30 w-full overflow-hidden p-2"
+                    >
+                      {frameBg ? (
+                        <img src={frameBg} className="max-w-full h-auto object-contain" style={{ imageRendering: 'auto' }} />
+                      ) : (
+                        <div className="flex flex-col items-center gap-1">
+                          <i className="fas fa-border-all text-blue-500 text-lg" />
+                          <span className="text-zinc-400 text-xs font-bold">{srcFrame.name} BG</span>
+                          <span className="text-blue-400 text-[9px] font-bold">NOT EXTRACTED</span>
+                        </div>
+                      )}
+                      <div className="absolute top-1 left-1">
+                        <div className="bg-blue-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded shadow w-fit">
+                          BG {frameIdx + 1}
+                        </div>
+                      </div>
+                      {/* Processing spinner */}
+                      {isActiveFrame && (isProcessingMaster || isCleaningFrame) ? (
+                        <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center gap-2">
+                          <i className="fas fa-spinner animate-spin text-blue-500 text-xl" />
+                          <span className="text-blue-300 text-[10px] font-bold uppercase">
+                            {isCleaningFrame ? 'AI Cleaning...' : 'Extracting Frame...'}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                          {isActiveFrame ? (
+                            <>
+                              <button
+                                onClick={handleStartFrameCrop}
+                                className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-[10px] font-bold uppercase shadow-lg transition-all transform hover:scale-105"
+                              >
+                                {frameBg ? 'Re-Crop' : 'Crop'}
+                              </button>
+                              {frameBg && (
+                                <>
+                                  <button
+                                    onClick={handleAICleanFrame}
+                                    className="bg-white hover:bg-zinc-200 text-black px-3 py-1.5 rounded text-[10px] font-bold uppercase shadow-lg flex items-center gap-1 transition-all transform hover:scale-105"
+                                  >
+                                    <i className="fas fa-sync-alt" /> Retry
+                                  </button>
+                                  <button
+                                    onClick={() => { setEditingSymbol({ id: '__reelsframe__', name: 'Reels Frame', isolatedUrl: frameBg } as any); setEditPrompt(''); setEditReference(null); }}
+                                    className="bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded text-[10px] font-bold uppercase shadow-lg flex items-center gap-1 transition-all transform hover:scale-105"
+                                  >
+                                    <i className="fas fa-wand-magic-sparkles" /> Edit
+                                  </button>
+                                  <label className="bg-zinc-700 hover:bg-zinc-600 text-white px-3 py-1.5 rounded text-[10px] font-bold uppercase shadow-lg flex items-center gap-1 transition-all transform hover:scale-105 cursor-pointer">
+                                    <i className="fas fa-upload" /> Upload
+                                    <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (!file) return;
+                                      const reader = new FileReader();
+                                      reader.onload = () => {
+                                        const url = reader.result as string;
+                                        updateActiveFrame({ reelsFrame: url });
+                                        addAsset({ id: `symgen-reelsframe-${Date.now()}`, url, type: 'background', name: `${srcFrame.name} BG (Uploaded)` });
+                                      };
+                                      reader.readAsDataURL(file);
+                                    }} />
+                                  </label>
+                                  <button
+                                    onClick={() => updateActiveFrame({ reelsFrame: null, reelsFrameCropCoordinates: null })}
+                                    className="bg-red-600/80 hover:bg-red-500 text-white px-3 py-1.5 rounded text-[10px] font-bold uppercase shadow-lg flex items-center gap-1 transition-all transform hover:scale-105"
+                                  >
+                                    <i className="fas fa-trash" /> Clear
+                                  </button>
+                                </>
+                              )}
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => updateState({ activeSourceFrameId: srcFrame.id })}
+                              className="bg-violet-600 hover:bg-violet-500 text-white px-3 py-1.5 rounded text-[10px] font-bold uppercase shadow-lg transition-all transform hover:scale-105"
+                            >
+                              Switch to {srcFrame.name}
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
-                  )}
-                </div>
-                <div className="p-3 flex justify-between items-center bg-zinc-900/50">
-                  <span className="text-xs font-bold text-blue-300">Reels Frame</span>
-                  {reelsFrame && (
-                    <button
-                      onClick={() => addAsset({ id: `symgen-reelsframe-${Date.now()}`, url: reelsFrame, type: 'background', name: 'Reels Frame' })}
-                      className="text-zinc-400 hover:text-white"
-                    >
-                      <i className="fas fa-save" />
-                    </button>
-                  )}
-                </div>
-              </div>
+                    <div className="p-3 flex justify-between items-center bg-zinc-900/50">
+                      <span className="text-xs font-bold text-blue-300">{srcFrame.name} Background</span>
+                      {frameBg && (
+                        <button
+                          onClick={() => addAsset({ id: `symgen-reelsframe-${Date.now()}`, url: frameBg, type: 'background', name: `${srcFrame.name} BG` })}
+                          className="text-zinc-400 hover:text-white"
+                        >
+                          <i className="fas fa-save" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -2676,21 +2795,48 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
             {/* Layout switcher */}
             <div className="flex items-center gap-1 px-3 pt-2 pb-1 border-b border-zinc-800 shrink-0 bg-zinc-900/50 rounded-xl border border-zinc-800">
               <span className="text-[9px] font-bold uppercase text-zinc-500 mr-1">LAYOUTS</span>
-              {(symbolGenState.layouts ?? []).map((layout) => (
-                <button
-                  key={layout.id}
-                  onClick={() => {
-                    updateState({ activeLayoutId: layout.id });
-                  }}
-                  className={`px-2.5 py-1 rounded text-[10px] font-bold transition-colors ${
-                    (symbolGenState.activeLayoutId ?? (symbolGenState.layouts ?? [])[0]?.id) === layout.id
-                      ? 'bg-cyan-600 text-white'
-                      : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700'
-                  }`}
-                >
-                  {layout.name}
-                </button>
-              ))}
+              {(symbolGenState.layouts ?? []).map((layout) => {
+                const isActive = (symbolGenState.activeLayoutId ?? (symbolGenState.layouts ?? [])[0]?.id) === layout.id;
+                const layouts = symbolGenState.layouts ?? [];
+                return (
+                  <div key={layout.id} className={`flex items-center gap-0.5 rounded text-[10px] font-bold transition-colors group/layouttab ${isActive ? 'bg-cyan-600' : 'bg-zinc-800 hover:bg-zinc-700'}`}>
+                    <button
+                      onClick={() => updateState({ activeLayoutId: layout.id })}
+                      onDoubleClick={() => {
+                        const val = window.prompt('Rename layout:', layout.name);
+                        if (val?.trim()) {
+                          setSymbolGenState(prev => ({
+                            ...prev,
+                            layouts: (prev.layouts ?? []).map(l => l.id === layout.id ? { ...l, name: val.trim() } : l),
+                          }));
+                        }
+                      }}
+                      className={`px-2.5 py-1 ${isActive ? 'text-white' : 'text-zinc-400 hover:text-white'}`}
+                      title="Click to switch · Double-click to rename"
+                    >
+                      {layout.name}
+                    </button>
+                    {layouts.length > 1 && (
+                      <button
+                        onClick={() => {
+                          if (!window.confirm(`Delete "${layout.name}"?`)) return;
+                          setSymbolGenState(prev => {
+                            const remaining = (prev.layouts ?? []).filter(l => l.id !== layout.id);
+                            const newActive = prev.activeLayoutId === layout.id
+                              ? (remaining[0]?.id ?? null)
+                              : prev.activeLayoutId;
+                            return { ...prev, layouts: remaining, activeLayoutId: newActive };
+                          });
+                        }}
+                        className={`pr-1.5 opacity-0 group-hover/layouttab:opacity-100 transition-opacity ${isActive ? 'text-cyan-200 hover:text-white' : 'text-zinc-500 hover:text-red-400'}`}
+                        title="Delete layout"
+                      >
+                        <i className="fas fa-xmark text-[8px]" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
               <button
                 onClick={() => {
                   const newLayout: SlotLayout = {
@@ -2708,6 +2854,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                     layoutGutterVertical: 10,
                     symbolScale: 105,
                     hideReelsBg: false,
+                    useLongTiles: false,
                   };
                   updateState({
                     layouts: [...(symbolGenState.layouts ?? []), newLayout],
@@ -2763,6 +2910,18 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                       />
                     </div>
                   </div>
+                  {/* Use long tiles toggle */}
+                  <label className="flex items-center gap-2 cursor-pointer select-none mt-1">
+                    <input
+                      type="checkbox"
+                      checked={useLongTiles ?? false}
+                      onChange={e => updateActiveLayout({ useLongTiles: e.target.checked })}
+                      className="accent-amber-500 w-3 h-3"
+                    />
+                    <span className="text-[9px] uppercase font-bold text-zinc-400">
+                      Use Long Tiles
+                    </span>
+                  </label>
                   {/* Presets */}
                   <div className="grid grid-cols-4 gap-1 mt-2">
                     <button onClick={handleRandomFill} className="bg-zinc-800 hover:bg-zinc-700 text-white py-1.5 rounded text-[9px] font-bold uppercase border border-zinc-700">Random</button>
@@ -2782,7 +2941,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                     2. Symbols
                   </h3>
                   <div className="grid grid-cols-3 gap-2 overflow-y-auto auto-rows-max">
-                    {symbols.map(s => {
+                    {symbols.filter(s => (useLongTiles ?? false) || (s.spanRows || 1) < 3).map(s => {
                       const isLong = (s.spanRows || 1) >= 3;
                       return (
                         <div
@@ -3034,11 +3193,17 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                 </h3>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
                 {/* LEFT: Frames + controls */}
                 <div className="flex flex-col gap-4">
 
-                  {/* Saved Merged Frames — shown first */}
+                  {/* Aspect ratio — above frames so previews match */}
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-zinc-400 block mb-2">Video Aspect Ratio</label>
+                    <AspectRatioSelector value={videoAspectRatio} onChange={(r) => setVideoAspectRatio(r as '16:9' | '9:16')} options={['16:9', '9:16']} />
+                  </div>
+
+                  {/* Saved Merged Frames */}
                   <div className="flex items-center gap-4">
                     <h4 className="text-xs font-bold text-white uppercase">
                       Saved Merged Frames ({frames.length})
@@ -3076,7 +3241,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                             </button>
                           </div>
                           <div className="aspect-[9/16] w-full relative">
-                            <img src={frame.dataUrl} className="w-full h-full object-contain bg-black" />
+                            <img src={frame.dataUrl} className="w-full h-full object-contain bg-[#00FF00]" />
                             <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-3 p-4">
                               <div className="flex gap-2 w-full">
                                 <button onClick={() => updateState({ selectedStartFrameId: frame.id })}
@@ -3141,36 +3306,29 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                     </div>
                   </div>
 
-                  {/* Aspect ratio */}
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-zinc-400 block mb-2">Video Aspect Ratio</label>
-                    <AspectRatioSelector value={videoAspectRatio} onChange={(r) => setVideoAspectRatio(r as '16:9' | '9:16')} options={['16:9', '9:16']} />
-                  </div>
-
                   {/* Animate button */}
                   {(() => {
                     const total = (animationPrompts || [animationPrompt]).filter(p => p.trim()).length * (animationVideoCount || 1);
                     return (
-                      <button onClick={handleGenerateVideo} disabled={isGeneratingVideo || !selectedStartFrameId || !selectedEndFrameId}
+                      <button onClick={handleGenerateVideo} disabled={!selectedStartFrameId || !selectedEndFrameId}
                         className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-lg text-xs font-black uppercase tracking-widest shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-95">
-                        {isGeneratingVideo
-                          ? <><i className="fas fa-spinner animate-spin" /> Generating...</>
-                          : <><i className="fas fa-video" /> Animate {total > 1 ? `${total} Videos` : 'Selected Frames'}</>}
+                        <i className="fas fa-video" /> Animate {total > 1 ? `${total} Videos` : 'Selected Frames'}
+                        {activeVideoJobs > 0 && <span className="ml-1 text-[9px] bg-white/20 px-1.5 py-0.5 rounded-full"><i className="fas fa-spinner animate-spin mr-1" />{activeVideoJobs} job{activeVideoJobs > 1 ? 's' : ''}</span>}
                       </button>
                     );
                   })()}
                 </div>
 
-                {/* Generated Videos Gallery */}
-                <div className="flex flex-col gap-4">
-                  <h4 className="text-[10px] font-bold text-zinc-400 uppercase">
+                {/* RIGHT: Generated Videos — padded to align with Saved Frames title */}
+                <div className="flex flex-col gap-4 pt-[72px]">
+                  <h4 className="text-xs font-bold text-white uppercase">
                     Generated Videos ({(generatedVideos || []).length})
                   </h4>
                   <div className="grid grid-cols-3 gap-4 overflow-y-auto max-h-[800px] p-1">
                     {(generatedVideos || []).map((vid, i) => (
                       <div key={vid.id} className="bg-black rounded-lg border border-zinc-800 overflow-hidden group relative shadow-lg">
                         <video data-slot-video src={vid.url} className="w-full aspect-[9/16] object-contain" controls loop />
-                        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                           <button onClick={() => setFullscreenVideo(vid.url)} className="bg-black/50 hover:bg-white text-white hover:text-black w-7 h-7 rounded flex items-center justify-center transition-colors">
                             <i className="fas fa-expand text-[10px]" />
                           </button>
@@ -3178,9 +3336,21 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                             <i className="fas fa-download text-[10px]" />
                           </a>
                         </div>
-                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {vid.prompt && <p className="text-[9px] text-zinc-300 line-clamp-2 mb-0.5">{vid.prompt}</p>}
-                          <span className="text-[9px] font-bold text-white">Video #{i + 1}</span>
+                        <div className="p-2 bg-zinc-900 border-t border-zinc-800 flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <span className="text-[9px] font-bold text-white">slot_anim_{i + 1}.mp4</span>
+                            {vid.prompt && <p className="text-[9px] text-zinc-400 line-clamp-2 mt-0.5">{vid.prompt}</p>}
+                          </div>
+                          <button
+                            onClick={() => {
+                              if (vid.url.startsWith('blob:')) URL.revokeObjectURL(vid.url);
+                              updateState({ generatedVideos: (generatedVideos || []).filter(v => v.id !== vid.id) });
+                            }}
+                            className="text-zinc-500 hover:text-red-400 transition-colors shrink-0 mt-0.5"
+                            title="Delete video"
+                          >
+                            <i className="fas fa-trash text-[10px]" />
+                          </button>
                         </div>
                       </div>
                     ))}
