@@ -75,15 +75,26 @@ export const generateStoryStructure = async (
   sceneCount: number
 ): Promise<{ title: string; scenes: GeneratedSceneRaw[]; key_elements?: any[] }> => {
   const ai = getAI();
-  const charDesc = characters.map((c) => `${c.name}: ${c.description}`).join("\n");
+  const charIdentities = characters.map((c) =>
+    `[${c.name}] FROZEN VISUAL IDENTITY: "${c.description}"`
+  ).join("\n");
 
   const prompt = `
     Role: Professional Screenwriter.
-    Characters: ${charDesc}
+
+    CHARACTER IDENTITY REGISTRY (IMMUTABLE — copy verbatim into every scene):
+    ${charIdentities}
+
     Visual Aesthetic: ${style}
     Story Brief: ${brief}
     TASK: Write a ${sceneCount}-scene script.
-    MANDATORY INSTRUCTION: In the "visual_prompt" for EACH scene, explicitly mention the character's clothing and specific traits (e.g., "John in his blue surfsuit, NO glasses, NO beard"). This acts as a reinforcement loop for the image generator.
+
+    CRITICAL VISUAL CONSISTENCY RULES:
+    1. Every "visual_prompt" MUST start with each character's FULL description copied VERBATIM from the IDENTITY REGISTRY above. Do NOT paraphrase, shorten, or embellish it. Example: if the registry says "40 year old redhead in emerald green silk dress", write EXACTLY that — not "wearing a green gown" or "in an emerald outfit".
+    2. After the verbatim identity tag, describe the scene action, environment, and composition.
+    3. The "video_prompt" should describe motion and action only — do NOT re-describe character appearance there.
+    4. Do NOT add clothing, accessories, tattoos, glasses, hats, or any visual traits that are NOT in the identity registry.
+
     Output JSON: { "title": "string", "scenes": [{ "title": "string", "dialogue": "string", "visual_prompt": "string", "video_prompt": "string", "camera_angle": "string" }] }
   `;
 

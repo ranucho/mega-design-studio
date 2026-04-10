@@ -155,7 +155,8 @@ export const ConceptTab: React.FC = () => {
           const blueprint = await generateCharacterSheetFromStory(
             char,
             style,
-            char.inputReferences
+            char.inputReferences,
+            brief
           );
           return { blueprint, index: i, char };
         },

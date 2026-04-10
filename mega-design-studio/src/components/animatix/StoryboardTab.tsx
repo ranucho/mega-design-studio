@@ -12,6 +12,7 @@ import {
   editSceneImage,
   generateCharacterSheetFromStory,
   generateSceneVideo,
+  generateStoryStructure,
 } from '@/services/gemini';
 import { parallelBatch } from '@/services/parallelBatch';
 
@@ -173,30 +174,51 @@ export const StoryboardTab: React.FC = () => {
     );
   }, [setIsApproved, scenes, handleRegenerateImage]);
 
-  const handleExtendStory = useCallback(async (brief: string, sceneCount: number, chapterAR: string) => {
+  const handleExtendStory = useCallback(async (continuationBrief: string, sceneCount: number, chapterAR: string) => {
     setExtendDialogOpen(false);
-    // For now, just create placeholder scenes - the full implementation would call the AI
-    for (let i = 0; i < sceneCount; i++) {
-      const newScene: StoryScene = {
-        id: Date.now() + i,
-        title: `Chapter Extension ${i + 1}`,
-        dialogue: '',
-        visual_prompt: brief,
-        action_prompt: brief,
-        camera_angle: 'Custom',
+    setStatusMessage('Generating new chapter...');
+
+    try {
+      // Build context from existing scenes so the AI continues the story
+      const existingSummary = scenes
+        .map((s, i) => `Scene ${i + 1} "${s.title}": ${s.visual_prompt}`)
+        .join('\n');
+      const fullBrief = `EXISTING STORY SO FAR:\n${existingSummary}\n\nCONTINUATION:\n${continuationBrief}`;
+
+      const storyData = await generateStoryStructure(characters, style, fullBrief, sceneCount);
+
+      const startId = Date.now();
+      const newScenes: StoryScene[] = storyData.scenes.map((s, i) => ({
+        id: startId + i,
+        title: s.title,
+        dialogue: s.dialogue,
+        visual_prompt: s.visual_prompt,
+        action_prompt: s.video_prompt,
+        camera_angle: s.camera_angle,
         aspectRatio: chapterAR,
         includeInVideo: true,
-      };
-      setScenes(prev => [...prev, newScene]);
-    }
-    // Auto-generate images if approved
-    if (isApproved) {
-      const startIdx = scenes.length;
-      for (let i = 0; i < sceneCount; i++) {
-        setTimeout(() => handleRegenerateImage(startIdx + i), i * 500);
+      }));
+
+      setScenes(prev => [...prev, ...newScenes]);
+      setStatusMessage(`Added ${newScenes.length} new scenes`);
+
+      // Auto-generate images if story is already approved
+      if (isApproved) {
+        const startIdx = scenes.length;
+        const items = newScenes.map((_, i) => ({ index: startIdx + i }));
+        await parallelBatch(
+          items,
+          async ({ index }) => { await handleRegenerateImage(index); },
+          undefined,
+          4,
+          800,
+        );
       }
+    } catch (err: any) {
+      console.error('Extend story failed:', err);
+      setStatusMessage(`Failed to extend story: ${err.message || 'Unknown error'}`);
     }
-  }, [scenes, isApproved, setScenes, handleRegenerateImage]);
+  }, [scenes, characters, style, isApproved, setScenes, setStatusMessage, handleRegenerateImage]);
 
   const handleGenerateVideos = useCallback(async () => {
     const scenesWithImages = scenes.filter(s => s.imageUrl && !s.videoUrl && !s.isGeneratingVideo);
@@ -285,7 +307,7 @@ export const StoryboardTab: React.FC = () => {
       return next;
     });
     try {
-      const blueprint = await generateCharacterSheetFromStory(char, style, char.inputReferences);
+      const blueprint = await generateCharacterSheetFromStory(char, style, char.inputReferences, brief);
       setCharacters(prev => {
         const next = [...prev];
         next[index] = { ...next[index], masterBlueprint: blueprint };

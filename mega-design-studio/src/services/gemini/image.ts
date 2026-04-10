@@ -70,7 +70,8 @@ const resizeToExact = (
 export const generateCharacterSheetFromStory = async (
   character: Character,
   style: string,
-  inputImages?: string[]
+  inputImages?: string[],
+  storyBrief?: string
 ): Promise<string> => {
   const ai = getAI();
   const parts: any[] = [];
@@ -124,12 +125,13 @@ export const generateCharacterSheetFromStory = async (
       CHARACTER IDENTITY:
       NAME: ${character.name}.
       DESCRIPTION: ${character.description}.
+      ${storyBrief ? `STORY CONTEXT (use this to determine the character's outfit and appearance): ${storyBrief}` : ''}
       LAYOUT REQUIREMENTS:
       - Generate ONE single image showing a 3-view character turnaround: [FRONT VIEW], [SIDE PROFILE], [CLOSE-UP FACE].
       - Use a clean, plain white background.
       STRICT CONSISTENCY & NEGATIVE CONSTRAINTS:
       - 1:1 IDENTITY LOCK: The character's face, hair, and build must be identical in all 3 views.
-      - OUTFIT LOCK: The character MUST wear the exact same clothing in all 3 views.
+      - OUTFIT LOCK: The character MUST wear the EXACT clothing described in the DESCRIPTION above. If the description says "emerald green silk dress", draw that EXACT outfit — not jeans, not a t-shirt, not a different dress. The description is the ONLY source of truth for what the character wears.
       - NO HALLUCINATIONS: DO NOT add glasses, beards, hats, or jewelry unless they are explicitly in the text description.
       - STYLE LOCK: Maintain a consistent "${style}" aesthetic throughout the entire image.
     `
