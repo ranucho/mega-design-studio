@@ -435,6 +435,12 @@ export interface SlotSkin {
   layoutGutterHorizontal: number;
   layoutGutterVertical: number;
   symbolScale: number;
+  /** Multi-frame snapshot (optional for backwards compat with older skins) */
+  sourceFrames?: SourceFrame[];
+  activeSourceFrameId?: string | null;
+  /** Multi-layout snapshot (optional for backwards compat with older skins) */
+  layouts?: SlotLayout[];
+  activeLayoutId?: string | null;
   firebaseUrls?: Record<string, string>;
   isUploaded: boolean;
   isUploading: boolean;

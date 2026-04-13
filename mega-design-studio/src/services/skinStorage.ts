@@ -76,6 +76,10 @@ export async function saveSlotSkin(
     layoutGutterHorizontal: state.layoutGutterHorizontal,
     layoutGutterVertical: state.layoutGutterVertical,
     symbolScale: state.symbolScale,
+    sourceFrames: state.sourceFrames,
+    activeSourceFrameId: state.activeSourceFrameId,
+    layouts: state.layouts,
+    activeLayoutId: state.activeLayoutId,
     isUploaded: false,
     isUploading: false,
   };
@@ -135,17 +139,36 @@ export function loadSlotSkinIntoState(
       reelsFrame: skin.reelsFrame,
       reelsFrameCropCoordinates: skin.reelsFrameCropCoordinates || null,
     };
-    // Also update the active sourceFrame so the sync effect doesn't later
-    // overwrite the skin with stale pre-load frame data
-    const frames = prev.sourceFrames ?? [];
-    const frameId = prev.activeSourceFrameId ?? frames[0]?.id;
-    const updatedFrames = frames.map(f =>
-      f.id === frameId ? { ...f, ...frameData, isProcessingMaster: false } : f
-    );
+    // If the skin has a multi-frame snapshot, restore it wholesale. Otherwise
+    // fall back to patching the active frame (legacy single-frame skins).
+    const hasFrameSnapshot = Array.isArray(skin.sourceFrames) && skin.sourceFrames.length > 0;
+    const restoredFrames = hasFrameSnapshot
+      ? skin.sourceFrames!.map(f => ({ ...f, isProcessingMaster: false }))
+      : (() => {
+          const frames = prev.sourceFrames ?? [];
+          const frameId = prev.activeSourceFrameId ?? frames[0]?.id;
+          return frames.map(f =>
+            f.id === frameId ? { ...f, ...frameData, isProcessingMaster: false } : f
+          );
+        })();
+    const restoredActiveFrameId = hasFrameSnapshot
+      ? (skin.activeSourceFrameId ?? skin.sourceFrames![0]?.id ?? null)
+      : prev.activeSourceFrameId;
+    // Mirror active frame's fields to top-level so the UI reads them immediately
+    const activeFrame = restoredFrames.find(f => f.id === restoredActiveFrameId) ?? restoredFrames[0];
+    const topLevelFrameData = activeFrame ? {
+      masterImage: activeFrame.masterImage,
+      reskinResult: activeFrame.reskinResult,
+      masterPrompt: activeFrame.masterPrompt,
+      activeMasterView: activeFrame.activeMasterView,
+      reelsFrame: activeFrame.reelsFrame,
+      reelsFrameCropCoordinates: activeFrame.reelsFrameCropCoordinates || null,
+    } : frameData;
     return {
       ...prev,
-      ...frameData,
-      sourceFrames: updatedFrames,
+      ...topLevelFrameData,
+      sourceFrames: restoredFrames,
+      activeSourceFrameId: restoredActiveFrameId,
       symbols: skin.symbols.map(s => ({
         id: s.id,
         name: s.name,
@@ -162,16 +185,45 @@ export function loadSlotSkinIntoState(
         scaleY: s.scaleY,
         lockScale: true,
       })),
-      gridState: skin.gridState,
-      gridRows: skin.gridRows,
-      gridCols: skin.gridCols,
-      layoutOffsetX: skin.layoutOffsetX,
-      layoutOffsetY: skin.layoutOffsetY,
-      layoutWidth: skin.layoutWidth,
-      layoutHeight: skin.layoutHeight,
-      layoutGutterHorizontal: skin.layoutGutterHorizontal,
-      layoutGutterVertical: skin.layoutGutterVertical,
-      symbolScale: skin.symbolScale,
+      ...(() => {
+        // If the skin has a multi-layout snapshot, restore it wholesale and
+        // mirror the active layout to the top-level fields. Otherwise keep
+        // the legacy top-level layout fields from the skin.
+        const hasLayoutSnapshot = Array.isArray(skin.layouts) && skin.layouts.length > 0;
+        if (!hasLayoutSnapshot) {
+          return {
+            gridState: skin.gridState,
+            gridRows: skin.gridRows,
+            gridCols: skin.gridCols,
+            layoutOffsetX: skin.layoutOffsetX,
+            layoutOffsetY: skin.layoutOffsetY,
+            layoutWidth: skin.layoutWidth,
+            layoutHeight: skin.layoutHeight,
+            layoutGutterHorizontal: skin.layoutGutterHorizontal,
+            layoutGutterVertical: skin.layoutGutterVertical,
+            symbolScale: skin.symbolScale,
+          };
+        }
+        const layouts = skin.layouts!;
+        const activeLayoutId = skin.activeLayoutId ?? layouts[0]?.id ?? null;
+        const active = layouts.find(l => l.id === activeLayoutId) ?? layouts[0];
+        return {
+          layouts,
+          activeLayoutId,
+          gridState: active.gridState,
+          gridRows: active.gridRows,
+          gridCols: active.gridCols,
+          layoutOffsetX: active.layoutOffsetX,
+          layoutOffsetY: active.layoutOffsetY,
+          layoutWidth: active.layoutWidth,
+          layoutHeight: active.layoutHeight,
+          layoutGutterHorizontal: active.layoutGutterHorizontal,
+          layoutGutterVertical: active.layoutGutterVertical,
+          symbolScale: active.symbolScale,
+          hideReelsBg: active.hideReelsBg,
+          useLongTiles: active.useLongTiles ?? false,
+        };
+      })(),
     };
   });
 }
@@ -215,6 +267,10 @@ export async function updateSlotSkin(
     layoutGutterHorizontal: state.layoutGutterHorizontal,
     layoutGutterVertical: state.layoutGutterVertical,
     symbolScale: state.symbolScale,
+    sourceFrames: state.sourceFrames,
+    activeSourceFrameId: state.activeSourceFrameId,
+    layouts: state.layouts,
+    activeLayoutId: state.activeLayoutId,
     isUploaded: false,
     isUploading: false,
   };

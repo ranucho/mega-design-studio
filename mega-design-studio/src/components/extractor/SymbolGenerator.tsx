@@ -1127,7 +1127,9 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
   // Auto re-extract background (reels frame) after reskin using stored crop coords.
   // Uses the original clean frame as a reference so the AI knows exactly what "clean" looks like.
   const autoReExtractBackground = async (reskinImageUrl: string) => {
-    // We need the existing clean reelsFrame as reference
+    // Only use the active frame's own clean frame as reference. Borrowing a
+    // sibling frame's clean frame causes foreground content (leaves, decor)
+    // from that image to bleed into the output.
     const cleanRef = activeFrame?.reelsFrame ?? reelsFrame;
     // Capture frame ID so async completion targets the correct frame
     const targetFrameId = symbolGenState.activeSourceFrameId ?? (symbolGenState.sourceFrames ?? [])[0]?.id;
@@ -1172,12 +1174,10 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
         const polished = await extractReelsFrame(result);
         if (polished) result = polished;
       } else {
-        // No reference available — fall back to multi-pass blind cleaning
-        result = dirtyCrop;
-        for (let pass = 0; pass < 3; pass++) {
-          const cleaned = await extractReelsFrame(result);
-          if (cleaned) result = cleaned;
-        }
+        // No reference available — single strict pass. Multiple passes
+        // compound drift (each pass hallucinates small decorative changes).
+        const cleaned = await extractReelsFrame(dirtyCrop);
+        result = cleaned || dirtyCrop;
       }
 
       if (targetFrameId) {
@@ -1274,8 +1274,43 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
       if (localRef) editAssets.push({ id: 'temp-edit-ref', url: localRef, type: 'style', name: 'Edit Reference' });
 
       if (isReelsFrame) {
-        // Edit the reels frame background
-        const modified = await modifyImage(symbolIsolatedUrl, prompt, '1:1', editAssets, true);
+        // Measure the original reels frame so we can lock the edited result
+        // back to the same pixel dimensions (Gemini returns arbitrary sizes
+        // that fit its aspect-ratio preset, not the source's exact crop size).
+        const origDims = await new Promise<{ w: number; h: number }>((resolve) => {
+          const img = new Image();
+          img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+          img.onerror = () => resolve({ w: 0, h: 0 });
+          img.src = symbolIsolatedUrl;
+        });
+        // Pick the closest Gemini aspect-ratio preset to the real frame shape.
+        const pickRatio = (w: number, h: number): string => {
+          if (!w || !h) return '1:1';
+          const r = w / h;
+          const presets: Array<[string, number]> = [
+            ['16:9', 16 / 9], ['4:3', 4 / 3], ['1:1', 1], ['3:4', 3 / 4], ['9:16', 9 / 16],
+          ];
+          return presets.reduce((best, cur) => Math.abs(cur[1] - r) < Math.abs(best[1] - r) ? cur : best)[0];
+        };
+        const editRatio = pickRatio(origDims.w, origDims.h);
+        let modified = await modifyImage(symbolIsolatedUrl, prompt, editRatio, editAssets, true);
+        // Force output to match original frame's exact pixel dimensions
+        if (origDims.w > 0 && origDims.h > 0) {
+          modified = await new Promise<string>((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+              const c = document.createElement('canvas');
+              c.width = origDims.w;
+              c.height = origDims.h;
+              const ctx = c.getContext('2d');
+              if (!ctx) { resolve(modified); return; }
+              ctx.drawImage(img, 0, 0, origDims.w, origDims.h);
+              resolve(c.toDataURL('image/png'));
+            };
+            img.onerror = () => resolve(modified);
+            img.src = modified;
+          });
+        }
         updateActiveFrame({ reelsFrame: modified });
         addAsset({ id: `symgen-reelsframe-${Date.now()}`, url: modified, type: 'background', name: 'Reels Frame (Edited)' });
         setIsCleaningFrame(false);
@@ -1996,7 +2031,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
     const ratio = videoAspectRatio;
 
     // Fire-and-forget — user can immediately change start/end and generate more
-    setActiveVideoJobs(n => n + 1);
+    setActiveVideoJobs(n => n + total);
     toast(`Generating ${total} video${total > 1 ? 's' : ''}...`, { type: 'info' });
 
     (async () => {
@@ -2004,28 +2039,31 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
         const paddedStart = await padFrameForVideoRatio(startFrame.dataUrl, ratio);
         const paddedEnd = await padFrameForVideoRatio(endFrame.dataUrl, ratio);
 
+        const jobs: Array<{ prompt: string }> = [];
         for (const p of activePrompts) {
-          for (let i = 0; i < count; i++) {
-            try {
-              const { url } = await generateAnimation(paddedStart, paddedEnd, p, ratio, 'fast');
-              const vidId = crypto.randomUUID();
-              // Add each video as it completes
-              setSymbolGenState(prev => ({
-                ...prev,
-                generatedVideos: [{ id: vidId, url, prompt: p }, ...(prev.generatedVideos || [])],
-              }));
-              addAsset({ id: vidId, url, type: 'game_symbol', name: `Slot Anim: ${p.slice(0, 20)}`, mediaType: 'video' });
-            } catch (err) {
-              console.error('Single video generation failed:', err);
-            }
-          }
+          for (let i = 0; i < count; i++) jobs.push({ prompt: p });
         }
+        await Promise.all(jobs.map(async ({ prompt: p }) => {
+          try {
+            const { url } = await generateAnimation(paddedStart, paddedEnd, p, ratio, 'fast');
+            const vidId = crypto.randomUUID();
+            // Add each video as it completes
+            setSymbolGenState(prev => ({
+              ...prev,
+              generatedVideos: [{ id: vidId, url, prompt: p }, ...(prev.generatedVideos || [])],
+            }));
+            addAsset({ id: vidId, url, type: 'game_symbol', name: `Slot Anim: ${p.slice(0, 20)}`, mediaType: 'video' });
+          } catch (err) {
+            console.error('Single video generation failed:', err);
+          } finally {
+            setActiveVideoJobs(n => n - 1);
+          }
+        }));
         toast(`Done generating ${total} video${total > 1 ? 's' : ''}`, { type: 'success', sound: true });
       } catch (err) {
         console.error(err);
         toast('Animation generation failed.', { type: 'error' });
-      } finally {
-        setActiveVideoJobs(n => n - 1);
+        setActiveVideoJobs(n => Math.max(0, n - total));
       }
     })();
   };
@@ -2941,7 +2979,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                     2. Symbols
                   </h3>
                   <div className="grid grid-cols-3 gap-2 overflow-y-auto auto-rows-max">
-                    {symbols.filter(s => (useLongTiles ?? false) || (s.spanRows || 1) < 3).map(s => {
+                    {symbols.map(s => {
                       const isLong = (s.spanRows || 1) >= 3;
                       return (
                         <div
@@ -3324,7 +3362,7 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
                   <h4 className="text-xs font-bold text-white uppercase">
                     Generated Videos ({(generatedVideos || []).length})
                   </h4>
-                  <div className="grid grid-cols-3 gap-4 overflow-y-auto max-h-[800px] p-1">
+                  <div className="grid grid-cols-3 gap-4 p-1">
                     {(generatedVideos || []).map((vid, i) => (
                       <div key={vid.id} className="bg-black rounded-lg border border-zinc-800 overflow-hidden group relative shadow-lg">
                         <video data-slot-video src={vid.url} className="w-full aspect-[9/16] object-contain" controls loop />
