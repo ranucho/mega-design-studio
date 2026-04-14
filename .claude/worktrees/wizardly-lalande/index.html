@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>App Hub</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9A%A1%3C/text%3E%3C/svg%3E" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #07070a;
+      --surface: #111118;
+      --border: #1e1e2e;
+      --text: #e4e4ed;
+      --text-muted: #6b6b80;
+      --accent: #6366f1;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Ambient background */
+    .ambient {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+    .ambient::before {
+      content: '';
+      position: absolute;
+      top: -40%;
+      left: -20%;
+      width: 80%;
+      height: 80%;
+      background: radial-gradient(ellipse, rgba(99,102,241,0.06) 0%, transparent 70%);
+      animation: drift 20s ease-in-out infinite;
+    }
+    .ambient::after {
+      content: '';
+      position: absolute;
+      bottom: -30%;
+      right: -20%;
+      width: 70%;
+      height: 70%;
+      background: radial-gradient(ellipse, rgba(236,72,153,0.04) 0%, transparent 70%);
+      animation: drift 25s ease-in-out infinite reverse;
+    }
+    @keyframes drift {
+      0%, 100% { transform: translate(0, 0); }
+      50% { transform: translate(5%, 3%); }
+    }
+
+    /* Grid pattern overlay */
+    .grid-pattern {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.012) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.012) 1px, transparent 1px);
+      background-size: 60px 60px;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 64px 32px 60px;
+    }
+
+    /* Header */
+    header {
+      text-align: center;
+      margin-bottom: 56px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      background: rgba(99,102,241,0.08);
+      border: 1px solid rgba(99,102,241,0.15);
+      border-radius: 100px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #818cf8;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 24px;
+    }
+    .badge .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #818cf8;
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    h1 {
+      font-size: clamp(36px, 5vw, 56px);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, #e4e4ed 30%, #6366f1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    header p {
+      font-size: 16px;
+      color: var(--text-muted);
+      max-width: 420px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+
+    /* Cards grid — top row 3, bottom row 2 centered */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    .cards-bottom {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+      margin-top: 24px;
+      max-width: 780px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .card {
+      position: relative;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 0;
+      overflow: hidden;
+      transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+      cursor: pointer;
+      text-decoration: none;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+    }
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(99,102,241,0.3);
+      box-shadow: 0 20px 60px -12px rgba(99,102,241,0.12);
+    }
+
+    /* Thumbnail area */
+    .card-thumb {
+      position: relative;
+      height: 180px;
+      overflow: hidden;
+    }
+    .card-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: top left;
+      transition: transform 0.4s ease;
+    }
+    .card:hover .card-thumb img {
+      transform: scale(1.03);
+    }
+
+    /* Gradient line at bottom of thumb */
+    .card-thumb::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--border), transparent);
+    }
+
+    /* Card body */
+    .card-body {
+      padding: 24px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    .card-body h3 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      letter-spacing: -0.01em;
+    }
+    .card-body p {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      flex: 1;
+    }
+
+    /* Tags */
+    .tags {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+    .tag {
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 100px;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+    .tag-indigo { background: rgba(99,102,241,0.1); color: #818cf8; }
+    .tag-green { background: rgba(16,185,129,0.1); color: #34d399; }
+    .tag-pink { background: rgba(236,72,153,0.1); color: #f472b6; }
+    .tag-amber { background: rgba(245,158,11,0.1); color: #fbbf24; }
+    .tag-cyan { background: rgba(6,182,212,0.1); color: #22d3ee; }
+    .tag-purple { background: rgba(139,92,246,0.1); color: #a78bfa; }
+
+    /* Card glow on hover */
+    .card::before {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(99,102,241,0.15), transparent 50%, rgba(236,72,153,0.1));
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      z-index: -1;
+    }
+    .card:hover::before { opacity: 1; }
+
+    /* Arrow indicator */
+    .card-arrow {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.04);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.3s ease, transform 0.3s ease;
+      z-index: 1;
+    }
+    .card-arrow svg {
+      width: 16px;
+      height: 16px;
+      stroke: var(--text-muted);
+      transition: stroke 0.3s ease;
+    }
+    .card:hover .card-arrow {
+      background: rgba(99,102,241,0.15);
+      transform: translate(2px, -2px);
+    }
+    .card:hover .card-arrow svg {
+      stroke: #818cf8;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      margin-top: 56px;
+      padding-top: 32px;
+      border-top: 1px solid var(--border);
+    }
+    footer p {
+      font-size: 12px;
+      color: var(--text-muted);
+      letter-spacing: 0.02em;
+    }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+      .cards { grid-template-columns: repeat(2, 1fr); }
+      .cards-bottom { grid-template-columns: 1fr; max-width: 100%; }
+    }
+    @media (max-width: 600px) {
+      .container { padding: 48px 20px 40px; }
+      .cards { grid-template-columns: 1fr; }
+      header { margin-bottom: 40px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="ambient"></div>
+  <div class="grid-pattern"></div>
+
+  <div class="container">
+    <header>
+      <div class="badge"><span class="dot" aria-hidden="true"></span> App Hub</div>
+      <h1>My Apps</h1>
+      <p>All your tools in one place. Pick an app and get to work.</p>
+    </header>
+
+    <!-- Top row: 3 cards -->
+    <div class="cards">
+
+      <!-- Mega Design Studio -->
+      <a class="card" href="http://localhost:3000" target="_blank" rel="noopener">
+        <div class="card-thumb">
+          <img src="/thumb-mega.png" alt="Mega Design Studio — Animatix storyboard creator" />
+          <div class="card-arrow">
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M7 17L17 7M17 7H7M17 7V17"/>
+            </svg>
+          </div>
+        </div>
+        <div class="card-body">
+          <h3>Mega Design Studio</h3>
+          <p>AI-powered game asset pipeline — characters, backgrounds, slot symbols, banners, storyboards, and video generation.</p>
+          <div class="tags">
+            <span class="tag tag-indigo">Gemini AI</span>
+            <span class="tag tag-pink">Game Assets</span>
+            <span class="tag tag-cyan">Video Gen</span>
+          </div>
+        </div>
+      </a>
+
+      <!-- SmallTalkGraphics -->
+      <a class="card" href="http://localhost:3001" target="_blank" rel="noopener">
+        <div class="card-thumb">
+          <img src="/thumb-stg.png" alt="SmallTalkGraphics — sync notes inbox" />
+          <div class="card-arrow">
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M7 17L17 7M17 7H7M17 7V17"/>
+            </svg>
+          </div>
+        </div>
+        <div class="card-body">
+          <h3>SmallTalkGraphics</h3>
+          <p>Turn daily sync small talk into fun, shareable infographics. Upload meeting notes, get beautiful visual summaries.</p>
+          <div class="tags">
+            <span class="tag tag-green">Infographics</span>
+            <span class="tag tag-amber">Meetings</span>
+            <span class="tag tag-indigo">AI</span>
+          </div>
+        </div>
+      </a>
+
+      <!-- AI Team Dashboard -->
+      <a class="card" href="/claude-team-dashboard.html" target="_blank" rel="noopener">
+        <div class="card-thumb">
+          <img src="/thumb-dashboard.png" alt="AI Team Dashboard — agents, skills, and mission control" />
+          <div class="card-arrow">
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M7 17L17 7M17 7H7M17 7V17"/>
+            </svg>
+          </div>
+        </div>
+        <div class="card-body">
+          <h3>AI Team Dashboard</h3>
+          <p>Mission control for your Claude Code agents — live sessions, activity feed, tool usage stats, and full team configuration.</p>
+          <div class="tags">
+            <span class="tag tag-indigo">14 Agents</span>
+            <span class="tag tag-pink">29 Skills</span>
+            <span class="tag tag-cyan">Mission Control</span>
+          </div>
+        </div>
+      </a>
+
+    </div>
+
+    <!-- Bottom row: 2 cards centered -->
+    <div class="cards-bottom">
+
+      <!-- New Bagels -->
+      <a class="card" href="http://localhost:3002" target="_blank" rel="noopener">
+        <div class="card-thumb">
+          <img src="/thumb-bagels.png" alt="New Bagels — employee video automation pipeline" />
+          <div class="card-arrow">
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M7 17L17 7M17 7H7M17 7V17"/>
+            </svg>
+          </div>
+        </div>
+        <div class="card-body">
+          <h3>New Bagels</h3>
+          <p>Employee video automation — upload spreadsheets and videos, assign, add subtitles, preview, and batch export.</p>
+          <div class="tags">
+            <span class="tag tag-amber">Video</span>
+            <span class="tag tag-green">Automation</span>
+            <span class="tag tag-indigo">HR</span>
+          </div>
+        </div>
+      </a>
+
+      <!-- Patience Zero -->
+      <a class="card" href="http://localhost:5173" target="_blank" rel="noopener">
+        <div class="card-thumb">
+          <img src="/thumb-patience.png" alt="Patience Zero — AI R&D Command Center" />
+          <div class="card-arrow">
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M7 17L17 7M17 7H7M17 7V17"/>
+            </svg>
+          </div>
+        </div>
+        <div class="card-body">
+          <h3>Patience Zero</h3>
+          <p>AI R&D Command Center — strategy council, intelligence radar, ops center, meeting insights, and unified chat bot.</p>
+          <div class="tags">
+            <span class="tag tag-purple">Command Center</span>
+            <span class="tag tag-pink">14 Modules</span>
+            <span class="tag tag-cyan">FastAPI</span>
+          </div>
+        </div>
+      </a>
+
+    </div>
+
+    <footer>
+      <p>Built with &#9889; &mdash; localhost dev hub</p>
+    </footer>
+  </div>
+
+  <script>
+    document.addEventListener('mousemove', (e) => {
+      const x = (e.clientX / window.innerWidth - 0.5) * 2;
+      const y = (e.clientY / window.innerHeight - 0.5) * 2;
+      document.querySelector('.ambient').style.transform =
+        `translate(${x * 8}px, ${y * 8}px)`;
+    }, { passive: true });
+  </script>
+</body>
+</html>
