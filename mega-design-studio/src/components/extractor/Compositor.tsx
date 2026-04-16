@@ -151,6 +151,33 @@ export const Compositor: React.FC = () => {
     return [...referenceAssets, ...globalOnly];
   }, [referenceAssets, assetLibrary]);
 
+  // Group assets by source ID prefix — mirrors TheLab's Asset Gallery categories
+  const groupedLabAssets = useMemo(() => {
+    type CatDef = { key: string; label: string; icon: string; color: string; match: (a: ReferenceAsset) => boolean };
+    const cats: CatDef[] = [
+      { key: 'captured',    label: 'Captured Frames',    icon: 'fa-camera',              color: 'text-blue-400',    match: a => a.id.startsWith('capture-frame-') },
+      { key: 'symbols',     label: 'Extracted Symbols',  icon: 'fa-diamond',             color: 'text-pink-500',    match: a => a.id.startsWith('symgen-symbol-') },
+      { key: 'backgrounds', label: 'Backgrounds',        icon: 'fa-image',               color: 'text-emerald-500', match: a => a.id.startsWith('symgen-reelsframe-') || (!a.id.startsWith('symgen-') && !a.id.startsWith('capture-') && !a.id.startsWith('animatix-') && a.type === 'background') },
+      { key: 'reskins',     label: 'Reskins',            icon: 'fa-wand-magic-sparkles', color: 'text-violet-500',  match: a => a.id.startsWith('symgen-reskin-') },
+      { key: 'characters',  label: 'Characters',         icon: 'fa-user',                color: 'text-amber-500',   match: a => a.id.startsWith('animatix-char-') || (!a.id.startsWith('symgen-') && !a.id.startsWith('capture-') && !a.id.startsWith('animatix-') && (a.type === 'character_primary' || a.type === 'character_secondary')) },
+      { key: 'scenes',      label: 'Scene Images',       icon: 'fa-film',                color: 'text-cyan-500',    match: a => a.id.startsWith('animatix-scene-') },
+    ];
+    const claimed = new Set<string>();
+    const grouped = cats.map(cat => {
+      const assets = labAssets.filter(a => {
+        if (claimed.has(a.id)) return false;
+        if (cat.match(a)) { claimed.add(a.id); return true; }
+        return false;
+      });
+      return { ...cat, assets };
+    }).filter(c => c.assets.length > 0);
+    const other = labAssets.filter(a => !claimed.has(a.id));
+    if (other.length > 0) {
+      grouped.push({ key: 'other', label: 'Other Assets', icon: 'fa-shapes', color: 'text-zinc-400', match: () => true, assets: other });
+    }
+    return grouped;
+  }, [labAssets]);
+
   const selectedLayer = layers.find(l => l.id === selectedLayerId) || null;
 
   // ---- Timeline helpers ----
@@ -1223,37 +1250,36 @@ export const Compositor: React.FC = () => {
                             {layer.name}
                           </span>
                         )}
-                        {layer.chromaKey.enabled && <span className="text-[8px] px-1 py-0.5 rounded font-bold text-black shrink-0" style={{ backgroundColor: '#00fa15' }}>CK</span>}
 
                         {/* Controls — always visible */}
-                        <div className="flex items-center gap-0.5 shrink-0">
+                        <div className="flex items-center gap-0 shrink-0">
                           <button onClick={(e) => { e.stopPropagation(); updateLayer(layer.id, { visible: !layer.visible }); }}
-                            className={`w-7 h-7 flex items-center justify-center transition-colors ${layer.visible ? 'text-zinc-400 hover:text-white' : 'text-zinc-600 hover:text-zinc-400'}`} title="Toggle visibility">
-                            <i className={`fas ${layer.visible ? 'fa-eye' : 'fa-eye-slash'} text-sm`} />
+                            className={`w-5 h-7 flex items-center justify-center transition-colors ${layer.visible ? 'text-zinc-400 hover:text-white' : 'text-zinc-600 hover:text-zinc-400'}`} title="Toggle visibility">
+                            <i className={`fas ${layer.visible ? 'fa-eye' : 'fa-eye-slash'} text-xs`} />
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); setExpandedOpacity(showOpacity ? null : layer.id); }}
-                            className={`w-7 h-7 flex items-center justify-center transition-colors ${showOpacity ? 'text-violet-400' : 'text-zinc-400 hover:text-white'}`}
+                            className={`w-5 h-7 flex items-center justify-center transition-colors ${showOpacity ? 'text-violet-400' : 'text-zinc-400 hover:text-white'}`}
                             title={`Opacity ${Math.round(layer.opacity * 100)}%`}
                           >
-                            <i className="fas fa-circle-half-stroke text-sm" />
+                            <i className="fas fa-circle-half-stroke text-xs" />
                           </button>
                           {layer.type === 'video' && (
                             <button onClick={(e) => { e.stopPropagation(); updateLayer(layer.id, { muted: !(layer.muted ?? false) }); }}
-                              className={`w-7 h-7 flex items-center justify-center transition-colors ${(layer.muted ?? false) ? 'text-zinc-600 hover:text-zinc-400' : 'text-zinc-400 hover:text-white'}`}
+                              className={`w-5 h-7 flex items-center justify-center transition-colors ${(layer.muted ?? false) ? 'text-zinc-600 hover:text-zinc-400' : 'text-zinc-400 hover:text-white'}`}
                               title={layer.muted ? 'Unmute' : 'Mute'}>
-                              <i className={`fas ${(layer.muted ?? false) ? 'fa-volume-xmark' : 'fa-volume-high'} text-sm`} />
+                              <i className={`fas ${(layer.muted ?? false) ? 'fa-volume-xmark' : 'fa-volume-high'} text-xs`} />
                             </button>
                           )}
                           <button onClick={(e) => { e.stopPropagation(); updateLayer(layer.id, { locked: !layer.locked }); }}
-                            className={`w-7 h-7 flex items-center justify-center transition-colors ${layer.locked ? 'text-amber-400' : 'text-zinc-400 hover:text-amber-400'}`} title={layer.locked ? 'Unlock' : 'Lock'}>
-                            <i className={`fas ${layer.locked ? 'fa-lock' : 'fa-lock-open'} text-sm`} />
+                            className={`w-5 h-7 flex items-center justify-center transition-colors ${layer.locked ? 'text-amber-400' : 'text-zinc-400 hover:text-amber-400'}`} title={layer.locked ? 'Unlock' : 'Lock'}>
+                            <i className={`fas ${layer.locked ? 'fa-lock' : 'fa-lock-open'} text-xs`} />
                           </button>
-                          <button onClick={(e) => { e.stopPropagation(); duplicateLayer(layer.id); }} className="text-zinc-400 hover:text-white w-7 h-7 flex items-center justify-center transition-colors" title="Duplicate">
-                            <i className="fas fa-clone text-sm" />
+                          <button onClick={(e) => { e.stopPropagation(); duplicateLayer(layer.id); }} className="text-zinc-400 hover:text-white w-5 h-7 flex items-center justify-center transition-colors" title="Duplicate">
+                            <i className="fas fa-clone text-xs" />
                           </button>
-                          <button onClick={(e) => { e.stopPropagation(); removeLayer(layer.id); }} className="text-zinc-400 hover:text-red-400 w-7 h-7 flex items-center justify-center transition-colors" title="Remove">
-                            <i className="fas fa-trash text-sm" />
+                          <button onClick={(e) => { e.stopPropagation(); removeLayer(layer.id); }} className="text-zinc-400 hover:text-red-400 w-5 h-7 flex items-center justify-center transition-colors" title="Remove">
+                            <i className="fas fa-trash text-xs" />
                           </button>
                         </div>
                       </div>
@@ -1342,29 +1368,56 @@ export const Compositor: React.FC = () => {
               {labAssets.length === 0 ? (
                 <div className="text-center py-12 text-zinc-400">No assets available. Generate some in the other studios first.</div>
               ) : (
-                <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
-                  {labAssets.map(asset => {
-                    const isVid = asset.mediaType === 'video';
-                    return (
-                      <button key={asset.id} onClick={() => addLayerFromAsset(asset)}
-                        className="bg-zinc-800 border border-zinc-700 rounded-xl overflow-hidden hover:border-violet-500 transition-all group">
-                        <div className="aspect-square bg-black p-2 flex items-center justify-center relative">
-                          {isVid ? (
-                            <>
-                              <video src={asset.url} className="max-w-full max-h-full object-contain" muted preload="metadata" />
-                              <div className="absolute bottom-2 right-2 bg-black/70 text-violet-400 text-[8px] px-1.5 py-0.5 rounded font-bold"><i className="fas fa-film mr-1" />VID</div>
-                            </>
-                          ) : (
-                            <img src={asset.url} className="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform" />
-                          )}
-                        </div>
-                        <div className="p-2 text-center">
-                          <span className="text-[10px] font-bold text-zinc-400 truncate block">{asset.name || asset.type}</span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+                groupedLabAssets.map(cat => (
+                  <div key={cat.key} className="mb-8 last:mb-0">
+                    <div className="flex items-center gap-2 mb-3">
+                      <i className={`fas ${cat.icon} ${cat.color} text-sm`} />
+                      <h4 className="text-xs font-black uppercase tracking-widest text-zinc-300">{cat.label}</h4>
+                      <span className="text-[10px] text-zinc-500 font-mono ml-1">({cat.assets.length})</span>
+                    </div>
+                    <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
+                      {cat.assets.map(asset => {
+                        const isVid = asset.mediaType === 'video';
+                        return (
+                          <button key={asset.id} onClick={() => addLayerFromAsset(asset)}
+                            className="bg-zinc-800 border border-zinc-700 rounded-xl overflow-hidden hover:border-violet-500 transition-all group">
+                            <div className="aspect-square bg-black p-2 flex items-center justify-center relative">
+                              {isVid ? (
+                                <>
+                                  {/* #t=0.1 forces the browser to paint a poster frame instead of a black box */}
+                                  <video
+                                    src={`${asset.url}#t=0.1`}
+                                    className="max-w-full max-h-full object-contain"
+                                    muted
+                                    playsInline
+                                    preload="metadata"
+                                    onMouseEnter={e => {
+                                      const v = e.currentTarget;
+                                      v.loop = true;
+                                      v.currentTime = 0;
+                                      v.play().catch(() => {});
+                                    }}
+                                    onMouseLeave={e => {
+                                      const v = e.currentTarget;
+                                      v.pause();
+                                      v.currentTime = 0.1;
+                                    }}
+                                  />
+                                  <div className="absolute bottom-2 right-2 bg-black/70 text-violet-400 text-[8px] px-1.5 py-0.5 rounded font-bold pointer-events-none"><i className="fas fa-film mr-1" />VID</div>
+                                </>
+                              ) : (
+                                <img src={asset.url} className="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform" />
+                              )}
+                            </div>
+                            <div className="p-2 text-center">
+                              <span className="text-[10px] font-bold text-zinc-400 truncate block">{asset.name || asset.type}</span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))
               )}
             </div>
           </div>

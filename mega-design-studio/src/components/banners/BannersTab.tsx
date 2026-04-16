@@ -13,6 +13,7 @@ import { BannerSparklePanel } from './BannerSparklePanel';
 import { BannerLuckyReskin } from './BannerLuckyReskin';
 import { BannerStage } from '@/types';
 import { SkinSelector } from '@/components/shared/SkinSelector';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 // Error boundary to catch render crashes and show the error instead of black screen
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
@@ -61,6 +62,7 @@ export const BannersTab: React.FC = () => {
   // Gallery vs compositor view for edit stage
   const [editView, setEditView] = React.useState<'gallery' | 'compositor'>('gallery');
   const [showLuckyReskin, setShowLuckyReskin] = React.useState(false);
+  const [matchLayoutConfirm, setMatchLayoutConfirm] = React.useState<{ targetKeys: string[]; touchedCount: number } | null>(null);
 
   const activeComposition = project?.compositions.find(c => c.id === activeCompositionId) ?? null;
 
@@ -123,12 +125,21 @@ export const BannersTab: React.FC = () => {
         })}
 
         {/* Generation progress indicator */}
-        {project?.isGenerating && (
-          <div className="ml-4 flex items-center gap-2 text-xs text-yellow-400">
-            <i className="fa-solid fa-spinner fa-spin" />
-            <span>Generating banners...</span>
-          </div>
-        )}
+        {project?.isGenerating && (() => {
+          const comps = project.compositions ?? [];
+          const total = comps.length || project.selectedPresets.length;
+          const done = comps.filter(c => c.status !== 'pending' && c.status !== 'generating').length;
+          return (
+            <div
+              className="ml-4 flex items-center gap-2 text-xs text-amber-300"
+              role="status"
+              aria-live="polite"
+            >
+              <i className="fa-solid fa-spinner fa-spin" />
+              <span className="tabular-nums">Generating {done} of {total}</span>
+            </div>
+          );
+        })()}
         <div className="ml-auto">
           <SkinSelector type="banner" />
         </div>
@@ -170,26 +181,18 @@ export const BannersTab: React.FC = () => {
                     .map(c => c.presetKey);
                   return (
                     <button
-                      onClick={() => {
-                        if (confirm(`Regenerate ${nonKickoffCount} banner(s) using the ${touchedKickoffs.length} edited primary banner(s) (FB Feed/Square/Stories/1920x1080) as AI reference?\n\nAny existing layouts on the other banners will be replaced with new AI designs that match your primary layouts.`)) {
-                          generateCompositions({ onlyKeys: targetKeys });
-                        }
-                      }}
-                      className="relative px-5 py-2 text-sm font-semibold bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 text-white rounded-lg transition-all shadow-lg shadow-purple-600/40 ring-2 ring-purple-400/50 hover:ring-purple-300/70 hover:scale-[1.02] flex items-center gap-2"
-                      title={`Regenerate ${nonKickoffCount} other banners using your ${touchedKickoffs.length} edited primary banner(s) as AI reference layouts`}
+                      onClick={() => setMatchLayoutConfirm({ targetKeys, touchedCount: touchedKickoffs.length })}
+                      className="px-4 py-2 text-sm font-semibold bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900"
+                      title={`Match layout of ${nonKickoffCount} other banners to your ${touchedKickoffs.length} edited primaries`}
                     >
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                         <rect x="1" y="9" width="7" height="6" rx="1.2" />
                         <rect x="16" y="1" width="7" height="5.5" rx="1.2" />
                         <rect x="16" y="9.25" width="7" height="5.5" rx="1.2" />
                         <rect x="16" y="17.5" width="7" height="5.5" rx="1.2" />
                         <path d="M8 12 H12 M12 4 V20 M12 4 H16 M12 12 H16 M12 20 H16" />
                       </svg>
-                      Apply Primary Layouts to {nonKickoffCount} Others
-                      <span className="absolute -top-1.5 -right-1.5 flex h-3 w-3">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-fuchsia-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-3 w-3 bg-fuchsia-500"></span>
-                      </span>
+                      Match layout to {nonKickoffCount} others
                     </button>
                   );
                 })()}
@@ -213,6 +216,21 @@ export const BannersTab: React.FC = () => {
             {showLuckyReskin && (
               <BannerLuckyReskin onClose={() => setShowLuckyReskin(false)} />
             )}
+            <ConfirmDialog
+              isOpen={!!matchLayoutConfirm}
+              title="Match layout?"
+              message={matchLayoutConfirm ? (
+                <>
+                  Match <span className="tabular-nums font-semibold text-white">{matchLayoutConfirm.targetKeys.length}</span> banners to your <span className="tabular-nums font-semibold text-white">{matchLayoutConfirm.touchedCount}</span> edited primaries. Existing layouts on those banners will be replaced.
+                </>
+              ) : ''}
+              confirmLabel="Match layout"
+              destructive
+              onConfirm={() => {
+                if (matchLayoutConfirm) generateCompositions({ onlyKeys: matchLayoutConfirm.targetKeys });
+              }}
+              onClose={() => setMatchLayoutConfirm(null)}
+            />
           </div>
         )}
         {currentStage === 'edit' && editView === 'compositor' && (

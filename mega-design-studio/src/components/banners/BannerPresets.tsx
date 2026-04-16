@@ -1,6 +1,7 @@
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useState } from 'react';
 import { useBanner } from '@/contexts/BannerContext';
 import { BANNER_PRESETS, BANNER_PRESET_CATEGORIES, BannerPresetCategory } from '@/types';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 const QUICK_SELECTS: { label: string; icon: string; filter: (cat: BannerPresetCategory) => boolean }[] = [
   { label: 'All', icon: 'fa-layer-group', filter: () => true },
@@ -79,6 +80,7 @@ export const BannerPresets: React.FC = () => {
   }, [selectedKeys, project?.selectedPresets, setSelectedPresets]);
 
   const selectedCount = selectedKeys.size;
+  const [matchConfirm, setMatchConfirm] = useState<{ targetKeys: string[]; touchedCount: number } | null>(null);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -86,10 +88,7 @@ export const BannerPresets: React.FC = () => {
         <div className="max-w-4xl mx-auto flex flex-col gap-6">
 
           <div className="text-center">
-            <h2 className="text-xl font-bold text-white mb-1">Select Target Sizes</h2>
-            <p className="text-zinc-400 text-sm">
-              Choose which banner sizes to generate. AI will redesign your banner for each size — not just crop or stretch.
-            </p>
+            <h2 className="text-xl font-bold text-white mb-1">Pick sizes</h2>
           </div>
 
           {/* Quick selects */}
@@ -120,10 +119,10 @@ export const BannerPresets: React.FC = () => {
                   ? 'bg-amber-600/20 text-amber-300 border-amber-600/40'
                   : 'text-amber-400/80 border-amber-700/40 hover:border-amber-500 hover:text-amber-300'
               }`}
-              title="All 18 Bagelcode production banner sizes"
+              title="Bagelcode production set"
             >
               <i className="fa-solid fa-star mr-1.5" />
-              All Bagelcode
+              Bagelcode set
             </button>
           </div>
 
@@ -140,7 +139,7 @@ export const BannerPresets: React.FC = () => {
                 <i className="fa-solid fa-scissors mr-1 text-cyan-400/70" />
                 Shorten CTAs on narrow banners
               </span>
-              <span className="text-[10px] text-zinc-500" title="SPIN NOW → SPIN, CLAIM NOW! → CLAIM, etc.">
+              <span className="text-xs text-zinc-400" title="SPIN NOW → SPIN, CLAIM NOW! → CLAIM, etc.">
                 <i className="fa-solid fa-circle-info" />
               </span>
             </label>
@@ -158,7 +157,9 @@ export const BannerPresets: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <i className={`fa-brands ${CATEGORY_ICONS[cat.key]} text-zinc-400 text-sm`} />
                     <h3 className="text-sm font-semibold text-zinc-300">{cat.label}</h3>
-                    <span className="text-[10px] text-zinc-400">({catSelected}/{presets.length})</span>
+                    {catSelected > 0 && (
+                      <span className="text-xs text-zinc-400 tabular-nums">· {catSelected}</span>
+                    )}
                   </div>
                   <button
                     onClick={() => {
@@ -171,7 +172,7 @@ export const BannerPresets: React.FC = () => {
                         setSelectedPresets(Array.from(merged));
                       }
                     }}
-                    className="text-[10px] text-zinc-400 hover:text-cyan-400 transition-colors uppercase tracking-wider"
+                    className="text-xs text-zinc-400 hover:text-cyan-400 transition-colors uppercase tracking-wider"
                   >
                     {allCatSelected ? 'Deselect all' : 'Select all'}
                   </button>
@@ -188,7 +189,8 @@ export const BannerPresets: React.FC = () => {
                       <button
                         key={preset.key}
                         onClick={() => togglePreset(preset.key)}
-                        className={`group relative flex items-center gap-2 px-3 py-2 rounded-lg text-xs border-2 transition-all ${
+                        aria-pressed={isSelected}
+                        className={`group relative flex items-center gap-2 px-3 py-2 rounded-lg text-xs border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 ${
                           hasComposition && isSelected
                             ? 'bg-emerald-600/20 text-emerald-200 border-emerald-400 shadow-md shadow-emerald-500/30 ring-1 ring-emerald-400/50'
                             : hasComposition
@@ -200,7 +202,7 @@ export const BannerPresets: React.FC = () => {
                       >
                         {/* Generated badge */}
                         {hasComposition && (
-                          <i className="fa-solid fa-check-circle text-emerald-400 text-[9px] absolute -top-1 -right-1" />
+                          <i className="fa-solid fa-check-circle text-emerald-400 text-xs absolute -top-1.5 -right-1.5" />
                         )}
                         {/* Aspect ratio indicator */}
                         <div
@@ -214,8 +216,8 @@ export const BannerPresets: React.FC = () => {
                         />
                         <div className="text-left">
                           <div className="font-medium">{preset.name}</div>
-                          <div className={`text-[10px] ${hasComposition ? 'text-emerald-500/70' : isSelected ? 'text-cyan-500/70' : 'text-zinc-400'}`}>
-                            {preset.width} x {preset.height}
+                          <div className={`text-xs tabular-nums ${hasComposition ? 'text-emerald-300/80' : isSelected ? 'text-cyan-300/80' : 'text-zinc-400'}`}>
+                            {preset.width} × {preset.height}
                           </div>
                         </div>
                       </button>
@@ -240,22 +242,14 @@ export const BannerPresets: React.FC = () => {
         <div className="flex items-center gap-4">
           {(() => {
             const newCount = [...selectedKeys].filter(k => !existingKeys.has(k)).length;
-            const existCount = existingKeys.size;
+            const existCount = [...selectedKeys].filter(k => existingKeys.has(k)).length;
+            if (newCount === 0 && existCount === 0) return null;
+            const parts: string[] = [];
+            if (newCount > 0) parts.push(`${newCount} to generate`);
+            if (existCount > 0) parts.push(`${existCount} already done`);
             return (
-              <span className="text-sm text-zinc-400 flex items-center gap-3">
-                {existCount > 0 && (
-                  <span>
-                    <span className="font-bold text-emerald-400">{existCount}</span> existing
-                  </span>
-                )}
-                {newCount > 0 && (
-                  <span>
-                    <span className="font-bold text-cyan-400">{newCount}</span> new
-                  </span>
-                )}
-                {existCount === 0 && newCount === 0 && (
-                  <span><span className="font-bold text-zinc-400">0</span> selected</span>
-                )}
+              <span className="text-sm text-zinc-300 tabular-nums">
+                {parts.join(' · ')}
               </span>
             );
           })()}
@@ -270,62 +264,80 @@ export const BannerPresets: React.FC = () => {
             const canPropagate = touchedKickoffCount > 0 && selectedNonKickoffKeys.length > 0;
             return canPropagate && !project?.isGenerating ? (
               <button
-                onClick={() => {
-                  if (confirm(`Regenerate ${selectedNonKickoffKeys.length} banner(s) using the ${touchedKickoffCount} edited primary banner(s) (FB Feed/Square/Stories/1920x1080) as AI reference?\n\nAny existing layouts on the other banners will be replaced with new AI designs that match your primary layouts.`)) {
-                    generateCompositions({ onlyKeys: selectedNonKickoffKeys });
-                  }
-                }}
-                className="relative px-5 py-2.5 text-sm font-semibold rounded-lg transition-all bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 text-white shadow-lg shadow-purple-600/40 ring-2 ring-purple-400/50 hover:ring-purple-300/70 hover:scale-[1.02] flex items-center gap-2"
-                title={`Regenerate ${selectedNonKickoffKeys.length} other banners using your ${touchedKickoffCount} edited primary banner(s) as AI reference layouts`}
+                onClick={() => setMatchConfirm({ targetKeys: selectedNonKickoffKeys, touchedCount: touchedKickoffCount })}
+                className="px-4 py-2 text-sm font-semibold rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white transition-colors flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900"
+                title={`Match layout of ${selectedNonKickoffKeys.length} banners to your ${touchedKickoffCount} edited primaries`}
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <rect x="1" y="9" width="7" height="6" rx="1.2" />
                   <rect x="16" y="1" width="7" height="5.5" rx="1.2" />
                   <rect x="16" y="9.25" width="7" height="5.5" rx="1.2" />
                   <rect x="16" y="17.5" width="7" height="5.5" rx="1.2" />
                   <path d="M8 12 H12 M12 4 V20 M12 4 H16 M12 12 H16 M12 20 H16" />
                 </svg>
-                Apply Primary Layouts to {selectedNonKickoffKeys.length} Others
-                <span className="absolute -top-1.5 -right-1.5 flex h-3 w-3">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-fuchsia-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-fuchsia-500"></span>
-                </span>
+                Match layout to {selectedNonKickoffKeys.length} others
               </button>
             ) : null;
           })()}
-          <button
-            disabled={selectedCount === 0 || project?.isGenerating}
-            onClick={() => {
-              const KICKOFFS = ['fb-feed', 'fb-square', 'fb-stories', 'fullhd-landscape'];
-              const nonKickoffKeys = [...selectedKeys].filter(k => !KICKOFFS.includes(k));
-              if (nonKickoffKeys.length > 0) {
-                generateCompositions({ onlyKeys: nonKickoffKeys });
-              } else {
-                generateCompositions();
-              }
-            }}
-            className={`px-6 py-2.5 text-sm font-medium rounded-lg transition-all shadow-lg ${
-              selectedCount > 0 && !project?.isGenerating
-                ? 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-cyan-600/20'
-                : 'bg-zinc-700 text-zinc-400 cursor-not-allowed shadow-none'
-            }`}
-          >
-            {project?.isGenerating ? (
-              <>
-                <i className="fa-solid fa-spinner fa-spin mr-2" />
-                Generating...
-              </>
-            ) : (
-              <>
-                {[...selectedKeys].filter(k => !existingKeys.has(k)).length > 0
-                  ? `Generate ${[...selectedKeys].filter(k => !existingKeys.has(k)).length} New`
-                  : 'Continue'}
-                <i className="fa-solid fa-arrow-right ml-2" />
-              </>
-            )}
-          </button>
+          {(() => {
+            const newKeys = [...selectedKeys].filter(k => !existingKeys.has(k));
+            const newCount = newKeys.length;
+            const hasAnyExisting = existingKeys.size > 0;
+            const isGenerating = !!project?.isGenerating;
+            const disabled = (selectedCount === 0 && !hasAnyExisting) || isGenerating;
+            const label = isGenerating
+              ? `Generating ${newCount || ''}…`.trim()
+              : newCount > 0
+                ? `Generate ${newCount}`
+                : 'Next';
+            return (
+              <button
+                disabled={disabled}
+                onClick={() => {
+                  if (newCount === 0) {
+                    // Nothing new to generate — go to edit stage, never silently regen
+                    setStage('edit');
+                    return;
+                  }
+                  const KICKOFFS = ['fb-feed', 'fb-square', 'fb-stories', 'fullhd-landscape'];
+                  const nonKickoffNewKeys = newKeys.filter(k => !KICKOFFS.includes(k));
+                  if (nonKickoffNewKeys.length > 0 && nonKickoffNewKeys.length !== newKeys.length) {
+                    generateCompositions({ onlyKeys: nonKickoffNewKeys });
+                  } else {
+                    generateCompositions();
+                  }
+                }}
+                className={`px-6 py-2.5 text-sm font-semibold rounded-lg transition-all shadow-lg tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 ${
+                  !disabled
+                    ? 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-cyan-600/20'
+                    : 'bg-zinc-700 text-zinc-400 cursor-not-allowed shadow-none'
+                }`}
+              >
+                {isGenerating ? (
+                  <><i className="fa-solid fa-spinner fa-spin mr-2" />{label}</>
+                ) : (
+                  <>{label}<i className="fa-solid fa-arrow-right ml-2" /></>
+                )}
+              </button>
+            );
+          })()}
         </div>
       </div>
+      <ConfirmDialog
+        isOpen={!!matchConfirm}
+        title="Match layout?"
+        message={matchConfirm ? (
+          <>
+            Match <span className="tabular-nums font-semibold text-white">{matchConfirm.targetKeys.length}</span> banners to your <span className="tabular-nums font-semibold text-white">{matchConfirm.touchedCount}</span> edited primaries. Existing layouts on those banners will be replaced.
+          </>
+        ) : ''}
+        confirmLabel="Match layout"
+        destructive
+        onConfirm={() => {
+          if (matchConfirm) generateCompositions({ onlyKeys: matchConfirm.targetKeys });
+        }}
+        onClose={() => setMatchConfirm(null)}
+      />
     </div>
   );
 };

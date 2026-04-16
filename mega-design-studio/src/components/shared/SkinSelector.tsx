@@ -13,7 +13,13 @@ interface SkinSelectorProps {
 
 // --- Inner component for Slot skins ---
 const SlotSkinSelector: React.FC = () => {
-  const { slotSkins, setSlotSkins, activeSlotSkinId, setActiveSlotSkinId, setSlotSkinIndex, symbolGenState, setSymbolGenState } = useExtractor();
+  const {
+    slotSkins, setSlotSkins, activeSlotSkinId, setActiveSlotSkinId, setSlotSkinIndex,
+    symbolGenState, setSymbolGenState,
+    compositorState, setCompositorState,
+    characterState, setCharacterState,
+    backgroundState, setBackgroundState,
+  } = useExtractor();
 
   const canSave = !!(symbolGenState.masterImage && symbolGenState.symbols.length > 0);
 
@@ -23,19 +29,19 @@ const SlotSkinSelector: React.FC = () => {
       activeSkinId={activeSlotSkinId}
       canSave={canSave}
       onSave={async (name) => {
-        const skin = await saveSlotSkin(name, symbolGenState);
+        const skin = await saveSlotSkin(name, symbolGenState, compositorState, characterState, backgroundState);
         setSlotSkins(prev => [skin, ...prev]);
         setActiveSlotSkinId(skin.id);
         setSlotSkinIndex(prev => [{ id: skin.id, name: skin.name, thumbnailUrl: skin.thumbnailUrl, createdAt: skin.createdAt }, ...prev]);
       }}
       onLoad={(skin) => {
-        loadSlotSkinIntoState(skin as SlotSkin, setSymbolGenState);
+        loadSlotSkinIntoState(skin as SlotSkin, setSymbolGenState, setCompositorState, setCharacterState, setBackgroundState);
         setActiveSlotSkinId(skin.id);
       }}
       onUpdate={async () => {
         const active = slotSkins.find(s => s.id === activeSlotSkinId);
         if (!active) return;
-        const updated = await updateSlotSkin(active as SlotSkin, symbolGenState);
+        const updated = await updateSlotSkin(active as SlotSkin, symbolGenState, compositorState, characterState, backgroundState);
         setSlotSkins(prev => prev.map(s => s.id === updated.id ? updated : s));
         setSlotSkinIndex(prev => prev.map(s => s.id === updated.id ? { ...s, thumbnailUrl: updated.thumbnailUrl } : s));
       }}

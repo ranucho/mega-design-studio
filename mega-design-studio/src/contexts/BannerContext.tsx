@@ -922,6 +922,26 @@ export const BannerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         300,  // delay between batches
         (err, preset) => {
           console.error(`Failed to generate layout for ${preset.name}:`, err);
+          const errComp: BannerComposition = {
+            id: crypto.randomUUID(),
+            name: preset.name,
+            presetKey: preset.key,
+            width: preset.width,
+            height: preset.height,
+            layers: [],
+            selectedLayerId: null,
+            backgroundColor: '#000000',
+            warnings: [],
+            status: 'error',
+            errorMessage: err instanceof Error ? err.message : String(err),
+          };
+          newCompositions.push(errComp);
+          setTimeout(() => {
+            setProject(prev => prev ? {
+              ...prev,
+              compositions: [...existingComps, ...newCompositions],
+            } : null);
+          }, 0);
         },
       );
     }

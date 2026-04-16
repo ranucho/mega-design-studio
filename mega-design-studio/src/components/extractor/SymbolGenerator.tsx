@@ -1651,58 +1651,54 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
     const cell = canvasEventToCell(e);
     if (!cell) return;
     let [r, c] = cell;
-    const g = (gridState || []).map(row => [...row]);
-
-    // Helper: find anchor row if dropping on a cell covered by a long tile
-    const findAnchor = (row: number, col: number): number => {
-      for (let rr = row; rr >= 0; rr--) {
-        const id = g[rr]?.[col];
-        if (id) {
-          const s = symbols.find(sym => sym.id === id);
-          if ((s?.spanRows || 1) + rr > row) return rr;
-          break;
-        }
-      }
-      return row;
-    };
 
     const symToPlace = dragItem.type === 'LIBRARY_SYMBOL'
       ? symbols.find(s => s.id === dragItem.symbolId)
-      : dragItem.gridR !== undefined ? symbols.find(s => s.id === g[dragItem.gridR!][dragItem.gridC!]) : null;
+      : dragItem.gridR !== undefined ? symbols.find(s => s.id === (gridState?.[dragItem.gridR!]?.[dragItem.gridC!] || '')) : null;
     const span = symToPlace?.spanRows || 1;
 
-    // For long tiles: prevent overflow past grid bottom
-    if (span > 1 && r + span > gridRows) {
-      r = gridRows - span; // snap to last valid row
-      if (r < 0) return; // grid too small for this tile
+    // Auto-grow ONLY when the layout's rows are fewer than the tile's span.
+    // Fixes the silent-fail on secondary layouts whose gridRows < 3.
+    let effectiveRows = gridRows;
+    let g: string[][] = (gridState || []).map(row => [...row]);
+    if (span > gridRows) {
+      const cols = g[0]?.length ?? gridCols;
+      while (g.length < span) g.push(Array(cols).fill(''));
+      effectiveRows = span;
+      r = 0;
+    } else if (span > 1 && r + span > effectiveRows) {
+      r = effectiveRows - span;
+      if (r < 0) { toast('Grid too small for this tile', { type: 'error' }); return; }
     }
+    // Safety: ensure g has at least effectiveRows rows (guards against
+    // gridState/gridRows drift that previously caused silent drop failures).
+    while (g.length < effectiveRows) g.push(Array(g[0]?.length ?? gridCols).fill(''));
 
     if (dragItem.type === 'LIBRARY_SYMBOL') {
-      // Clear ALL cells in the span range first
-      for (let sr = 0; sr < span && (r + sr) < gridRows; sr++) {
-        g[r + sr][c] = '';
+      for (let sr = 0; sr < span && (r + sr) < effectiveRows; sr++) {
+        if (g[r + sr]) g[r + sr][c] = '';
       }
       g[r][c] = dragItem.symbolId;
     } else if (dragItem.gridR !== undefined && dragItem.gridC !== undefined) {
       const srcR = dragItem.gridR;
       const srcC = dragItem.gridC;
-      const src = g[srcR][srcC];
-      // Clear source span
+      const src = g[srcR]?.[srcC] || '';
       const srcSym = symbols.find(s => s.id === src);
       const srcSpan = srcSym?.spanRows || 1;
-      for (let sr = 0; sr < srcSpan && (srcR + sr) < gridRows; sr++) {
-        g[srcR + sr][srcC] = '';
+      for (let sr = 0; sr < srcSpan && (srcR + sr) < effectiveRows; sr++) {
+        if (g[srcR + sr]) g[srcR + sr][srcC] = '';
       }
-      // Clear destination span
-      for (let sr = 0; sr < span && (r + sr) < gridRows; sr++) {
-        g[r + sr][c] = '';
+      for (let sr = 0; sr < span && (r + sr) < effectiveRows; sr++) {
+        if (g[r + sr]) g[r + sr][c] = '';
       }
       g[r][c] = src;
     }
 
-    updateActiveLayout({ gridState: g });
+    const updates: Partial<SlotLayout> = { gridState: g };
+    if (effectiveRows > gridRows) updates.gridRows = effectiveRows;
+    updateActiveLayout(updates);
     setDragItem(null);
-  }, [dragItem, canvasEventToCell, gridState, symbols, gridRows, updateActiveLayout]);
+  }, [dragItem, canvasEventToCell, gridState, symbols, gridRows, gridCols, updateActiveLayout, toast]);
 
   // Determine which frame's reelsFrame to use as the layout canvas background
   const layoutBackground = useMemo(() => {

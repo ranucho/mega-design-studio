@@ -265,7 +265,11 @@ export interface BannerComposition {
   selectedLayerIds?: string[];
   backgroundColor: string;
   warnings: QualityWarning[];
-  status: 'pending' | 'generating' | 'ready' | 'edited' | 'approved';
+  status: 'pending' | 'generating' | 'ready' | 'edited' | 'approved' | 'error';
+  /** Error message if status === 'error' (AI layout generation failed). */
+  errorMessage?: string;
+  /** When true, this banner is protected from bulk regeneration (Match Layout). */
+  locked?: boolean;
   /** Data URL of sparkle-enhanced version (if applied) */
   sparkleDataUrl?: string;
 }
@@ -441,6 +445,14 @@ export interface SlotSkin {
   /** Multi-layout snapshot (optional for backwards compat with older skins) */
   layouts?: SlotLayout[];
   activeLayoutId?: string | null;
+  /** Compositor snapshot: layers (with colors, trims, chroma), canvas, timeline zoom */
+  compositorState?: CompositorState;
+  /** Character Studio snapshot — reskin/sheet/isolated images + generated videos */
+  characterState?: import('@/types/editor').CharacterState;
+  /** Background Studio snapshot — source/generated images + generated videos */
+  backgroundState?: BackgroundState;
+  /** Slot Generator's reel-animation videos (Veo outputs) — blob URLs baked to data URLs */
+  generatedVideos?: { id: string; url: string; prompt?: string }[];
   firebaseUrls?: Record<string, string>;
   isUploaded: boolean;
   isUploading: boolean;

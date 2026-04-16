@@ -258,9 +258,9 @@ export const BannerExportDialog: React.FC = () => {
         <div className="max-w-3xl mx-auto flex flex-col gap-6">
 
           <div className="text-center">
-            <h2 className="text-xl font-bold text-white mb-1">Export Banners</h2>
-            <p className="text-zinc-400 text-sm">
-              {compositions.length} composition{compositions.length !== 1 ? 's' : ''} ready for export
+            <h2 className="text-xl font-bold text-white mb-1">Export</h2>
+            <p className="text-zinc-400 text-sm tabular-nums">
+              {compositions.length} ready
             </p>
           </div>
 
@@ -277,7 +277,7 @@ export const BannerExportDialog: React.FC = () => {
               placeholder="banner-project"
               className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-cyan-500 focus:outline-none transition-colors"
             />
-            <div className="text-[10px] text-zinc-500 mt-1.5 font-mono">
+            <div className="text-xs text-zinc-400 mt-1.5 font-mono">
               Files: <span className="text-cyan-400/80">{projectName}_WxH.{format === 'jpeg' ? 'jpg' : format}</span> &nbsp;·&nbsp; Zip: <span className="text-cyan-400/80">{projectName}_banners.zip</span>
             </div>
           </div>
@@ -336,7 +336,7 @@ export const BannerExportDialog: React.FC = () => {
             {hasChecked && totalWarnings.length === 0 && (
               <div className="flex items-center gap-2 text-green-400 text-sm">
                 <i className="fa-solid fa-circle-check" />
-                All compositions pass quality checks
+                All clear
               </div>
             )}
 
@@ -379,8 +379,8 @@ export const BannerExportDialog: React.FC = () => {
 
           {/* Composition list */}
           <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
-            <h3 className="text-sm font-semibold text-zinc-300 mb-3">
-              Compositions ({compositions.length})
+            <h3 className="text-sm font-semibold text-zinc-300 mb-3 tabular-nums">
+              Banners · {compositions.length}
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
               {compositions.map(comp => {
@@ -394,13 +394,13 @@ export const BannerExportDialog: React.FC = () => {
                       className="flex items-center justify-center bg-zinc-900"
                       style={{ aspectRatio: `${comp.width}/${comp.height}`, maxHeight: 120 }}
                     >
-                      <span className="text-[9px] text-zinc-400">{comp.width}x{comp.height}</span>
+                      <span className="text-xs text-zinc-400 tabular-nums">{comp.width}×{comp.height}</span>
                     </div>
                     <div className="px-2 py-1.5 border-t border-zinc-700/50 flex items-center justify-between">
-                      <span className="text-[10px] text-zinc-400 truncate flex-1">{comp.name}</span>
+                      <span className="text-xs text-zinc-400 truncate flex-1">{comp.name}</span>
                       <button
                         onClick={() => handleExportSingle(comp)}
-                        className="text-[9px] text-cyan-400 hover:text-cyan-300 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="text-xs text-cyan-400 hover:text-cyan-300 opacity-0 group-hover:opacity-100 transition-opacity"
                         title="Download this size"
                       >
                         <i className="fa-solid fa-download" />
@@ -409,7 +409,7 @@ export const BannerExportDialog: React.FC = () => {
                     {compWarnings.length > 0 && (
                       <div className="absolute top-1 right-1">
                         <div className="w-4 h-4 rounded-full bg-yellow-600/80 flex items-center justify-center">
-                          <span className="text-[8px] text-white font-bold">{compWarnings.length}</span>
+                          <span className="text-xs text-white font-bold tabular-nums">{compWarnings.length}</span>
                         </div>
                       </div>
                     )}
@@ -425,7 +425,7 @@ export const BannerExportDialog: React.FC = () => {
               <i className="fa-solid fa-spinner fa-spin text-cyan-400" />
               <div className="flex-1">
                 <div className="flex justify-between text-xs text-zinc-400 mb-1">
-                  <span>Rendering compositions...</span>
+                  <span className="tabular-nums">Rendering {compositions.length}…</span>
                   <span>{Math.round(exportProgress)}%</span>
                 </div>
                 <div className="h-1.5 bg-zinc-700 rounded-full overflow-hidden">
@@ -466,7 +466,7 @@ export const BannerExportDialog: React.FC = () => {
           ) : (
             <>
               <i className="fa-solid fa-download mr-2" />
-              Download All ({compositions.length} sizes)
+              Download all ({compositions.length})
             </>
           )}
         </button>

@@ -1,7 +1,9 @@
 import type {
   SlotSkin, BannerSkin, SkinSymbolSnapshot, SkinIndexEntry,
-  SymbolGeneratorState, BannerProject, BannerComposition,
+  SymbolGeneratorState, BannerProject, BannerComposition, CompositorState,
+  BackgroundState,
 } from '@/types/shared';
+import type { CharacterState } from '@/types/editor';
 import {
   putSlotSkin, putBannerSkin, removeSlotSkin, removeBannerSkin,
   addToSlotIndex, addToBannerIndex, removeFromSlotIndex, removeFromBannerIndex,
@@ -11,6 +13,51 @@ import {
   isFirebaseConfigured, uploadSlotSkin as fbUploadSlot, uploadBannerSkin as fbUploadBanner,
   deleteSkinFolder, uploadManifest,
 } from './firebase';
+
+// --- Video persistence helpers ---
+//
+// Veo returns generated videos as in-memory blob: URLs (see gemini/video.ts).
+// These disappear on reload. To make them survive a saved skin we convert
+// each blob: URL to a data: URL (base64) so it can be serialized into
+// IndexedDB / JSON-synced via Dropbox.
+
+async function blobUrlToDataUrl(url: string): Promise<string> {
+  if (!url || !url.startsWith('blob:')) return url;
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  } catch (err) {
+    console.warn('[skinStorage] Failed to convert blob URL, dropping video:', err);
+    return url; // keep original; likely invalid but saves the metadata
+  }
+}
+
+async function persistVideoList<T extends { url: string }>(videos: T[] | undefined): Promise<T[]> {
+  if (!videos || videos.length === 0) return [];
+  return Promise.all(videos.map(async v => ({ ...v, url: await blobUrlToDataUrl(v.url) })));
+}
+
+async function persistCompositorLayers(cs?: CompositorState): Promise<CompositorState | undefined> {
+  if (!cs) return cs;
+  const layers = await Promise.all(cs.layers.map(async l => ({ ...l, src: await blobUrlToDataUrl(l.src) })));
+  return { ...cs, layers };
+}
+
+async function persistCharacterState(st?: CharacterState): Promise<CharacterState | undefined> {
+  if (!st) return st;
+  return { ...st, generatedVideos: await persistVideoList(st.generatedVideos) };
+}
+
+async function persistBackgroundState(st?: BackgroundState): Promise<BackgroundState | undefined> {
+  if (!st) return st;
+  return { ...st, generatedVideos: await persistVideoList(st.generatedVideos) };
+}
 
 // --- Thumbnail generation ---
 
@@ -40,9 +87,18 @@ export function generateThumbnail(dataUrl: string): Promise<string> {
 export async function saveSlotSkin(
   name: string,
   state: SymbolGeneratorState,
+  compositorState?: CompositorState,
+  characterState?: CharacterState,
+  backgroundState?: BackgroundState,
 ): Promise<SlotSkin> {
   const sourceImage = state.reskinResult || state.masterImage;
   const thumbnailUrl = sourceImage ? await generateThumbnail(sourceImage) : '';
+
+  // Convert all blob: video URLs to data: URLs so they survive serialization
+  const persistedGeneratedVideos = await persistVideoList(state.generatedVideos);
+  const persistedCompositor = await persistCompositorLayers(compositorState);
+  const persistedCharacter = await persistCharacterState(characterState);
+  const persistedBackground = await persistBackgroundState(backgroundState);
 
   const skin: SlotSkin = {
     id: crypto.randomUUID(),
@@ -80,6 +136,10 @@ export async function saveSlotSkin(
     activeSourceFrameId: state.activeSourceFrameId,
     layouts: state.layouts,
     activeLayoutId: state.activeLayoutId,
+    generatedVideos: persistedGeneratedVideos,
+    compositorState: persistedCompositor,
+    characterState: persistedCharacter,
+    backgroundState: persistedBackground,
     isUploaded: false,
     isUploading: false,
   };
@@ -127,8 +187,47 @@ async function backgroundUploadSlotSkin(skin: SlotSkin): Promise<void> {
 export function loadSlotSkinIntoState(
   skin: SlotSkin,
   setSymbolGenState: React.Dispatch<React.SetStateAction<SymbolGeneratorState>>,
+  setCompositorState?: React.Dispatch<React.SetStateAction<CompositorState>>,
+  setCharacterState?: React.Dispatch<React.SetStateAction<CharacterState>>,
+  setBackgroundState?: React.Dispatch<React.SetStateAction<BackgroundState>>,
 ) {
+  // Restore the compositor snapshot (layers, colors, chroma, trims, canvas,
+  // timeline zoom). Transient fields (playback, export) are reset.
+  if (setCompositorState && skin.compositorState) {
+    const cs = skin.compositorState;
+    setCompositorState(prev => ({
+      ...prev,
+      ...cs,
+      isPlaying: false,
+      isExporting: false,
+      playheadTime: 0,
+    }));
+  }
+  // Restore Character Studio state (reskin, sheet, isolated image, chroma/luma
+  // key color, generated videos). Transient processing flags are reset.
+  if (setCharacterState && skin.characterState) {
+    const cs = skin.characterState;
+    setCharacterState(() => ({
+      ...cs,
+      isProcessingReskin: false,
+      isProcessingSheet: false,
+      isProcessingIsolation: false,
+      isProcessingVideo: false,
+    }));
+  }
+  // Restore Background Studio state (source, generated, crop, generated videos)
+  if (setBackgroundState && skin.backgroundState) {
+    const bs = skin.backgroundState;
+    setBackgroundState(() => ({
+      ...bs,
+      isProcessing: false,
+      isProcessingVideo: false,
+    }));
+  }
   setSymbolGenState(prev => {
+    const restoredVideos = skin.generatedVideos && skin.generatedVideos.length > 0
+      ? skin.generatedVideos
+      : prev.generatedVideos;
     const skinMasterView = skin.reskinResult ? 'reskinned' as const : 'source' as const;
     // The frame-level fields that mirror to top-level
     const frameData = {
@@ -167,6 +266,7 @@ export function loadSlotSkinIntoState(
     return {
       ...prev,
       ...topLevelFrameData,
+      generatedVideos: restoredVideos,
       sourceFrames: restoredFrames,
       activeSourceFrameId: restoredActiveFrameId,
       symbols: skin.symbols.map(s => ({
@@ -233,9 +333,23 @@ export function loadSlotSkinIntoState(
 export async function updateSlotSkin(
   existingSkin: SlotSkin,
   state: SymbolGeneratorState,
+  compositorState?: CompositorState,
+  characterState?: CharacterState,
+  backgroundState?: BackgroundState,
 ): Promise<SlotSkin> {
   const sourceImage = state.reskinResult || state.masterImage;
   const thumbnailUrl = sourceImage ? await generateThumbnail(sourceImage) : existingSkin.thumbnailUrl;
+
+  const persistedGeneratedVideos = await persistVideoList(state.generatedVideos);
+  const persistedCompositor = compositorState
+    ? await persistCompositorLayers(compositorState)
+    : existingSkin.compositorState;
+  const persistedCharacter = characterState
+    ? await persistCharacterState(characterState)
+    : existingSkin.characterState;
+  const persistedBackground = backgroundState
+    ? await persistBackgroundState(backgroundState)
+    : existingSkin.backgroundState;
 
   const updated: SlotSkin = {
     ...existingSkin,
@@ -271,6 +385,10 @@ export async function updateSlotSkin(
     activeSourceFrameId: state.activeSourceFrameId,
     layouts: state.layouts,
     activeLayoutId: state.activeLayoutId,
+    generatedVideos: persistedGeneratedVideos,
+    compositorState: persistedCompositor,
+    characterState: persistedCharacter,
+    backgroundState: persistedBackground,
     isUploaded: false,
     isUploading: false,
   };
