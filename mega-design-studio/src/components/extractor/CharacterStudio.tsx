@@ -19,6 +19,8 @@ export const CharacterStudio: React.FC = () => {
   const [triggerName, setTriggerName] = useState('');
   const [showLabPicker, setShowLabPicker] = useState(false);
   const [fullscreenVideo, setFullscreenVideo] = useState<{ url: string; prompt?: string } | null>(null);
+  const [loopVideo, setLoopVideo] = useState(false);
+  const [activeVideoJobs, setActiveVideoJobs] = useState(0);
   const [dragState, setDragState] = useState<{
     handle: DragHandle; startX: number; startY: number; startCrop: Crop;
   } | null>(null);
@@ -26,7 +28,7 @@ export const CharacterStudio: React.FC = () => {
   const {
     sourceImage, generatedImage, characterSheet, isolatedImage,
     prompt, videoPrompts, videoCount, crop, bgColor, aspectRatio, generatedVideos,
-    isProcessingReskin, isProcessingSheet, isProcessingIsolation, isProcessingVideo,
+    isProcessingReskin, isProcessingSheet, isProcessingIsolation,
   } = characterState;
 
   const RATIOS = ['9:16', '1:1', '16:9', '4:3'] as const;
@@ -190,30 +192,44 @@ Output: A clean, full-body character on pure white background.`;
     finally { updateState({ isProcessingIsolation: false }); }
   };
 
-  // --- Video generation (multi-prompt, multi-count) ---
-  const handleGenerateVideos = async () => {
+  // --- Video generation (multi-prompt, multi-count, fire-and-forget parallel) ---
+  const handleGenerateVideos = () => {
     if (!isolatedImage) return;
     const activePrompts = videoPrompts.filter(p => p.trim().length > 0);
     if (activePrompts.length === 0) return;
-    updateState({ isProcessingVideo: true });
-    try {
-      const count = Math.min(4, Math.max(1, videoCount));
-      const newVideos: { url: string; id: string; prompt?: string }[] = [];
-      for (const vPrompt of activePrompts) {
-        for (let i = 0; i < count; i++) {
-          try {
-            const videoAR = aspectRatio === '9:16' ? '9:16' : '16:9';
-            const result = await generateGreenScreenVideo(isolatedImage, vPrompt, bgColor, videoAR);
-            newVideos.push({ url: result.url, id: crypto.randomUUID(), prompt: vPrompt });
-          } catch (err) { console.error(`Video failed: "${vPrompt}" (${i + 1})`, err); }
+    const count = Math.min(4, Math.max(1, videoCount));
+    const videoAR = aspectRatio === '9:16' ? '9:16' : '16:9';
+    const loop = loopVideo;
+    const image = isolatedImage;
+    const color = bgColor;
+
+    const jobs: { prompt: string }[] = [];
+    for (const p of activePrompts) {
+      for (let i = 0; i < count; i++) jobs.push({ prompt: p });
+    }
+    const total = jobs.length;
+
+    setActiveVideoJobs(n => n + total);
+    toast(`Generating ${total} video${total > 1 ? 's' : ''}...`, { type: 'info' });
+
+    (async () => {
+      await Promise.all(jobs.map(async ({ prompt: vPrompt }) => {
+        try {
+          const result = await generateGreenScreenVideo(image, vPrompt, color, videoAR, loop);
+          const vidId = crypto.randomUUID();
+          setCharacterState(prev => ({
+            ...prev,
+            generatedVideos: [{ url: result.url, id: vidId, prompt: vPrompt }, ...(prev.generatedVideos || [])],
+          }));
+          addAsset({ id: vidId, url: result.url, type: 'character_primary', name: `Char Video: ${vPrompt.slice(0, 20)}`, mediaType: 'video' });
+        } catch (err) {
+          console.error(`Video failed: "${vPrompt}"`, err);
+        } finally {
+          setActiveVideoJobs(n => Math.max(0, n - 1));
         }
-      }
-      updateState({ generatedVideos: [...generatedVideos, ...newVideos] });
-      // Auto-save videos to Lab
-      newVideos.forEach((v, i) => addAsset({ id: v.id, url: v.url, type: 'character_primary', name: `Char Video: ${v.prompt?.slice(0, 20) || i + 1}`, mediaType: 'video' }));
-      toast(`Generated ${newVideos.length} video(s)`, { type: 'success' });
-    } catch (err) { console.error(err); toast('Video generation failed', { type: 'error' }); }
-    finally { updateState({ isProcessingVideo: false }); }
+      }));
+      toast(`Done generating ${total} video${total > 1 ? 's' : ''}`, { type: 'success' });
+    })();
   };
 
   const handleAddToAssets = (url: string, name: string) => {
@@ -398,10 +414,9 @@ Output: A clean, full-body character on pure white background.`;
               <div className="bg-black border border-zinc-800 rounded-xl overflow-hidden p-3 relative">
                 <span className="text-[9px] text-zinc-400 font-bold uppercase block mb-1">Isolated Preview</span>
                 <img src={isolatedImage} className="w-full h-auto object-contain" />
-                {isProcessingVideo && (
-                  <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center z-20 backdrop-blur-sm">
-                    <div className="w-8 h-8 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mb-2" />
-                    <span className="text-xs font-bold text-white uppercase animate-pulse">Generating...</span>
+                {activeVideoJobs > 0 && (
+                  <div className="absolute top-2 right-2 z-20 bg-pink-600/90 text-white text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-full flex items-center gap-1.5 backdrop-blur-sm">
+                    <i className="fas fa-spinner animate-spin" /> {activeVideoJobs} job{activeVideoJobs > 1 ? 's' : ''}
                   </div>
                 )}
                 <button onClick={() => handleAddToAssets(isolatedImage, 'Isolated Character')}
@@ -438,24 +453,31 @@ Output: A clean, full-body character on pure white background.`;
                 </div>
 
                 {/* Video count */}
-                <div className="flex items-center gap-4">
-                  <label className="text-[10px] uppercase font-bold text-zinc-400">Per prompt:</label>
-                  <div className="flex gap-1">
-                    {[1, 2, 3, 4].map(n => (
-                      <button key={n} onClick={() => updateState({ videoCount: n })}
-                        className={`w-10 h-10 rounded-lg text-sm font-black transition-all ${videoCount === n ? 'bg-pink-600 text-white shadow-lg scale-105' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 border border-zinc-700'}`}>
-                        {n}
-                      </button>
-                    ))}
+                <div className="flex items-center gap-6 flex-wrap">
+                  <div className="flex items-center gap-4">
+                    <label className="text-[10px] uppercase font-bold text-zinc-400">Per prompt:</label>
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 4].map(n => (
+                        <button key={n} onClick={() => updateState({ videoCount: n })}
+                          className={`w-10 h-10 rounded-lg text-sm font-black transition-all ${videoCount === n ? 'bg-pink-600 text-white shadow-lg scale-105' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 border border-zinc-700'}`}>
+                          {n}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  {totalVideos > 0 && <span className="text-[10px] text-zinc-400 italic">= {totalVideos} total</span>}
+                  <label className="flex items-center gap-2 cursor-pointer group select-none">
+                    <input type="checkbox" checked={loopVideo} onChange={e => setLoopVideo(e.target.checked)}
+                      className="w-4 h-4 accent-pink-600 cursor-pointer" />
+                    <span className="text-[10px] uppercase font-bold text-zinc-400 group-hover:text-white transition-colors tracking-widest">
+                      <i className="fas fa-repeat mr-1.5" /> Loop
+                    </span>
+                  </label>
                 </div>
 
-                <button onClick={handleGenerateVideos} disabled={!isolatedImage || activePromptCount === 0 || isProcessingVideo}
-                  className="bg-pink-600 hover:bg-pink-500 text-white py-3 rounded-lg text-xs font-bold uppercase transition-colors disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
-                  {isProcessingVideo
-                    ? <><i className="fas fa-spinner animate-spin" /> Generating {totalVideos} Video{totalVideos > 1 ? 's' : ''}...</>
-                    : <><i className="fas fa-film" /> Generate {totalVideos} Video{totalVideos > 1 ? 's' : ''}</>}
+                <button onClick={handleGenerateVideos} disabled={!isolatedImage || activePromptCount === 0}
+                  className="self-start bg-pink-600 hover:bg-pink-500 text-white px-6 py-3 rounded-lg text-xs font-bold uppercase transition-colors disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
+                  <i className="fas fa-film" /> Generate {totalVideos} Video{totalVideos > 1 ? 's' : ''}
+                  {activeVideoJobs > 0 && <span className="ml-1 text-[9px] bg-white/20 px-1.5 py-0.5 rounded-full"><i className="fas fa-spinner animate-spin mr-1" />{activeVideoJobs} running</span>}
                 </button>
               </div>
             </div>

@@ -94,7 +94,8 @@ export const generateGreenScreenVideo = async (
   imageDataUrl: string,
   prompt: string,
   backgroundColor: 'green' | 'blue' | 'pink',
-  aspectRatio: '16:9' | '9:16' = '16:9'
+  aspectRatio: '16:9' | '9:16' = '16:9',
+  loop: boolean = false
 ): Promise<{ url: string; asset: any }> => {
   return retryOperation(async () => {
     const ai = getAI();
@@ -110,12 +111,17 @@ export const generateGreenScreenVideo = async (
     const bgPrompt = `The character must appear on a SOLID ${backgroundColor.toUpperCase()} SCREEN background (Exact Hex: ${bgHex}) for chroma keying. No shadows, no gradients on the background.`;
 
     const attemptGeneration = async (currentPrompt: string) => {
-      const fullPrompt = `${currentPrompt}. ${bgPrompt} The character performs the action while staying in frame. High quality animation.`;
+      const loopHint = loop ? ' The action loops seamlessly — the final frame must match the starting pose exactly so the video can play on repeat without a visible jump.' : '';
+      const fullPrompt = `${currentPrompt}. ${bgPrompt} The character performs the action while staying in frame.${loopHint} High quality animation.`;
+      const config: any = { numberOfVideos: 1, resolution: '720p', aspectRatio };
+      if (loop) {
+        config.lastFrame = { imageBytes: data, mimeType };
+      }
       const operation = await ai.models.generateVideos({
         model: 'veo-3.1-fast-generate-preview',
         prompt: fullPrompt,
         image: { imageBytes: data, mimeType },
-        config: { numberOfVideos: 1, resolution: '720p', aspectRatio }
+        config
       });
       return pollVideoOperation(operation, ai);
     };

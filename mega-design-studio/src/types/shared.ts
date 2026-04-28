@@ -110,6 +110,7 @@ export interface MergedFrame {
   dataUrl: string;
   label: string;
   timestamp?: number;
+  hideReelsBg?: boolean;
 }
 
 export interface SymbolGeneratorState {

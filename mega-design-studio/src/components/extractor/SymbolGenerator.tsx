@@ -1935,14 +1935,57 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
 
   // ---- Merge & Save ----
 
-  const handleMergeAndSaveFrame = () => {
+  // Bake a 9:16 green-screen frame with the composition anchored to the bottom (or centered).
+  const bakeGreenScreenFrame = (sourceDataUrl: string, verticalAlign: 'bottom' | 'center'): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const srcW = img.width, srcH = img.height;
+        if (!srcW || !srcH) { resolve(sourceDataUrl); return; }
+
+        // Target is 9:16 with the same width as the source.
+        const targetAR = 9 / 16;
+        const targetW = srcW;
+        const targetH = Math.round(srcW / targetAR);
+
+        // If the source is already taller than 9:16 (srcAR < targetAR), grow width instead.
+        let canW = targetW, canH = targetH;
+        if (srcH > targetH) {
+          canH = srcH;
+          canW = Math.round(srcH * targetAR);
+        }
+
+        const out = document.createElement('canvas');
+        out.width = canW;
+        out.height = canH;
+        const ctx = out.getContext('2d');
+        if (!ctx) { resolve(sourceDataUrl); return; }
+        ctx.fillStyle = '#00FF00';
+        ctx.fillRect(0, 0, canW, canH);
+
+        const offsetX = Math.round((canW - srcW) / 2);
+        const offsetY = verticalAlign === 'bottom'
+          ? canH - srcH
+          : Math.round((canH - srcH) / 2);
+        ctx.drawImage(img, offsetX, offsetY);
+        resolve(out.toDataURL('image/png'));
+      };
+      img.onerror = () => resolve(sourceDataUrl);
+      img.src = sourceDataUrl;
+    });
+  };
+
+  const handleMergeAndSaveFrame = async () => {
     if (!canvasRef.current) return;
-    const url = canvasRef.current.toDataURL('image/png');
+    const rawUrl = canvasRef.current.toDataURL('image/png');
+    const align = hideReelsBg ? 'center' : 'bottom';
+    const url = await bakeGreenScreenFrame(rawUrl, align);
     const frame: MergedFrame = {
       id: crypto.randomUUID(),
       dataUrl: url,
       label: `Frame ${(savedFrames || mergedFrames).length + 1}`,
       timestamp: Date.now(),
+      hideReelsBg: !!hideReelsBg,
     };
     updateState({ savedFrames: [...(savedFrames || []), frame], mergedFrames: [...mergedFrames, frame] });
   };
@@ -1963,8 +2006,13 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
   // Track number of active generation jobs (allows parallel generation)
   const [activeVideoJobs, setActiveVideoJobs] = useState(0);
 
-  // Pad a frame image with green (#00FF00) to match the target video aspect ratio
-  const padFrameForVideoRatio = (frameDataUrl: string, targetRatio: '16:9' | '9:16'): Promise<string> => {
+  // Pad a frame image with green (#00FF00) to match the target video aspect ratio.
+  // verticalAlign: 'bottom' anchors the source to the bottom (green above only); 'center' centers vertically.
+  const padFrameForVideoRatio = (
+    frameDataUrl: string,
+    targetRatio: '16:9' | '9:16',
+    verticalAlign: 'center' | 'bottom' = 'center'
+  ): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
@@ -1998,9 +2046,11 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
         ctx.fillStyle = '#00FF00';
         ctx.fillRect(0, 0, canW, canH);
 
-        // Center the source image
         const offsetX = Math.round((canW - img.width) / 2);
-        const offsetY = Math.round((canH - img.height) / 2);
+        // Bottom-align only applies when we added bars top/bottom (srcAR > targetAR)
+        const offsetY = verticalAlign === 'bottom' && srcAR > targetAR
+          ? canH - img.height
+          : Math.round((canH - img.height) / 2);
         ctx.drawImage(img, offsetX, offsetY);
 
         resolve(canvas.toDataURL('image/png'));
@@ -2032,8 +2082,10 @@ COLOUR & CONTRAST REQUIREMENTS — THIS IS CRITICAL FOR VISUAL QUALITY:
 
     (async () => {
       try {
-        const paddedStart = await padFrameForVideoRatio(startFrame.dataUrl, ratio);
-        const paddedEnd = await padFrameForVideoRatio(endFrame.dataUrl, ratio);
+        const startAlign = startFrame.hideReelsBg ? 'center' : 'bottom';
+        const endAlign = endFrame.hideReelsBg ? 'center' : 'bottom';
+        const paddedStart = await padFrameForVideoRatio(startFrame.dataUrl, ratio, startAlign);
+        const paddedEnd = await padFrameForVideoRatio(endFrame.dataUrl, ratio, endAlign);
 
         const jobs: Array<{ prompt: string }> = [];
         for (const p of activePrompts) {

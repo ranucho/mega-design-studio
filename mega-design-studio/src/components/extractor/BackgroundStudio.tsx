@@ -36,6 +36,7 @@ export const BackgroundStudio: React.FC = () => {
   const [assetName, setAssetName] = useState('');
   const [showLabPicker, setShowLabPicker] = useState(false);
   const [fullscreenVideo, setFullscreenVideo] = useState<string | null>(null);
+  const [loopVideo, setLoopVideo] = useState(false);
   const [dragState, setDragState] = useState<{
     handle: DragHandle; startX: number; startY: number;
     startCrop: { x: number; y: number; w: number; h: number };
@@ -157,7 +158,7 @@ export const BackgroundStudio: React.FC = () => {
       const newVideos: { url: string; id: string }[] = [];
       for (let i = 0; i < count; i++) {
         try {
-          const { url } = await generateAnimation(generatedImage, null, videoPrompt, aspectRatio === '9:16' ? '9:16' : '16:9', 'fast');
+          const { url } = await generateAnimation(generatedImage, loopVideo ? generatedImage : null, videoPrompt, aspectRatio === '9:16' ? '9:16' : '16:9', 'fast');
           newVideos.push({ url, id: crypto.randomUUID() });
         } catch (err) { console.error(`Video ${i + 1} failed`, err); }
       }
@@ -308,38 +309,36 @@ export const BackgroundStudio: React.FC = () => {
       {generatedImage && (
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 mb-8 animate-in slide-in-from-bottom-4">
           <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400 mb-4">4. Animate</h3>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="bg-black rounded-xl border border-zinc-800 overflow-hidden relative">
-              <img src={generatedImage} className="w-full h-auto object-contain" />
-              {isProcessingVideo && (
-                <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center backdrop-blur-sm">
-                  <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-3" />
-                  <span className="text-xs font-bold text-white uppercase tracking-widest animate-pulse">Generating...</span>
-                </div>
-              )}
-            </div>
-            <div className="lg:col-span-2 flex flex-col gap-4">
+          <div className="flex flex-col gap-4">
               <textarea className="w-full bg-black border border-zinc-700 rounded-lg p-3 text-sm text-white focus:border-blue-500 outline-none resize-none h-20"
                 placeholder='E.g. "Camera slowly panning right, clouds moving"'
                 value={videoPrompt} onChange={e => updateState({ videoPrompt: e.target.value })} />
-              <div className="flex items-center gap-4">
-                <label className="text-[10px] uppercase font-bold text-zinc-400">Variations:</label>
-                <div className="flex gap-1">
-                  {[1, 2, 3, 4].map(n => (
-                    <button key={n} onClick={() => updateState({ videoCount: n })}
-                      className={`w-10 h-10 rounded-lg text-sm font-black transition-all ${videoCount === n ? 'bg-blue-600 text-white shadow-lg scale-105' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 border border-zinc-700'}`}>
-                      {n}
-                    </button>
-                  ))}
+              <div className="flex items-center gap-6 flex-wrap">
+                <div className="flex items-center gap-4">
+                  <label className="text-[10px] uppercase font-bold text-zinc-400">Variations:</label>
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4].map(n => (
+                      <button key={n} onClick={() => updateState({ videoCount: n })}
+                        className={`w-10 h-10 rounded-lg text-sm font-black transition-all ${videoCount === n ? 'bg-blue-600 text-white shadow-lg scale-105' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 border border-zinc-700'}`}>
+                        {n}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+                <label className="flex items-center gap-2 cursor-pointer group select-none">
+                  <input type="checkbox" checked={loopVideo} onChange={e => setLoopVideo(e.target.checked)}
+                    className="w-4 h-4 accent-blue-600 cursor-pointer" />
+                  <span className="text-[10px] uppercase font-bold text-zinc-400 group-hover:text-white transition-colors tracking-widest">
+                    <i className="fas fa-repeat mr-1.5" /> Loop
+                  </span>
+                </label>
               </div>
               <button onClick={handleGenerateVideos} disabled={!videoPrompt || isProcessingVideo}
-                className="bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-lg text-xs font-bold uppercase transition-colors disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
+                className="self-start bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-lg text-xs font-bold uppercase transition-colors disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
                 {isProcessingVideo
                   ? <><i className="fas fa-spinner animate-spin" /> Generating {videoCount} Video{videoCount > 1 ? 's' : ''}...</>
                   : <><i className="fas fa-film" /> Generate {videoCount} Video{videoCount > 1 ? 's' : ''}</>}
               </button>
-            </div>
           </div>
         </div>
       )}
